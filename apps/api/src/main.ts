@@ -19,10 +19,27 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
   const port = Number(process.env.PORT ?? configService.get<string>('API_PORT') ?? 3001);
-  const corsOrigin = configService.get<string>('CORS_ORIGIN', 'http://localhost:3000');
+
+  const corsRaw =
+    process.env.CORS_ORIGIN ??
+    configService.get<string>('CORS_ORIGIN', 'http://localhost:3000');
+  const corsOrigins = corsRaw
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
 
   app.enableCors({
-    origin: corsOrigin,
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      const allowed =
+        corsOrigins.includes(origin) ||
+        (origin.endsWith('.vercel.app') &&
+          corsOrigins.some((o) => o.includes('vercel.app')));
+      callback(null, allowed);
+    },
     credentials: true,
   });
 

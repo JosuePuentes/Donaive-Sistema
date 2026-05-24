@@ -6,7 +6,8 @@
 2. En el **Web Service** de la API → **Environment** → añade:
    - `DATABASE_URL` = **Internal Database URL** (copiar del panel del Postgres).
    - `JWT_SECRET` = cadena aleatoria larga.
-   - `CORS_ORIGIN` = URL del frontend (ej. `https://donaive-web.onrender.com`).
+   - `CORS_ORIGIN` = URLs del frontend separadas por coma, ej.  
+     `https://donaive-web.vercel.app,http://localhost:3000`
    - `NODE_VERSION` = `20`
 
 No commits la URL real al repositorio.
