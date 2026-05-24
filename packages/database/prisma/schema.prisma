@@ -1,0 +1,835 @@
+// =============================================================================
+// FERRETERÍA LOS PUENTES — Esquema de Base de Datos
+// Stack: PostgreSQL + Prisma ORM
+// Moneda base: USD | Moneda transaccional: VES (Bolívares)
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ───────────────────────────────────────────────────────────────────
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum RoleCode {
+  ADMIN
+  ADMIN_OPERATOR
+  CASHIER
+}
+
+enum PermissionCode {
+  // Configuración
+  CONFIG_VIEW
+  CONFIG_MANAGE
+  BANKS_VIEW
+  BANKS_MANAGE
+  PAYMENT_METHODS_MANAGE
+  EXCHANGE_RATE_VIEW
+  EXCHANGE_RATE_MANAGE
+
+  // Inventario
+  PRODUCTS_VIEW
+  PRODUCTS_MANAGE
+  INVENTORY_VIEW
+  INVENTORY_ADJUST
+  INVENTORY_SHRINKAGE
+
+  // Compras
+  SUPPLIERS_VIEW
+  SUPPLIERS_MANAGE
+  PURCHASES_VIEW
+  PURCHASES_CREATE
+  PURCHASES_APPROVE
+  ACCOUNTS_PAYABLE_VIEW
+  ACCOUNTS_PAYABLE_MANAGE
+
+  // Ventas / Admin
+  CUSTOMERS_VIEW
+  CUSTOMERS_MANAGE
+  INVOICES_VIEW
+  INVOICES_CREATE
+  INVOICES_VOID
+  CREDIT_NOTES_CREATE
+  DEBIT_NOTES_CREATE
+  ACCOUNTS_RECEIVABLE_VIEW
+  ACCOUNTS_RECEIVABLE_MANAGE
+
+  // POS
+  POS_ACCESS
+  POS_SELL
+  POS_HOLD
+  POS_PRICE_LOOKUP
+  CASH_REGISTER_OPEN
+  CASH_REGISTER_CLOSE
+  CASH_REGISTER_VIEW
+
+  // Reportes
+  REPORTS_DAILY_SALES
+  REPORTS_SALES_BOOK
+  REPORTS_INVENTORY_ANALYSIS
+  REPORTS_CASH_FLOW
+  REPORTS_EXPORT
+
+  // Usuarios
+  USERS_VIEW
+  USERS_MANAGE
+  ROLES_MANAGE
+}
+
+enum CurrencyCode {
+  USD
+  VES
+}
+
+enum ExchangeRateSource {
+  BCV
+  MANUAL
+}
+
+enum PaperType {
+  TICKET_80MM
+  TICKET_58MM
+  CARTA
+}
+
+enum ProductUnit {
+  UNIT
+  KG
+  LITER
+  METER
+  BOX
+  PACK
+}
+
+enum InventoryMovementType {
+  PURCHASE_IN
+  SALE_OUT
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  SHRINKAGE_OUT
+  RETURN_IN
+  RETURN_OUT
+  TRANSFER_IN
+  TRANSFER_OUT
+}
+
+enum InventoryAdjustmentReason {
+  COUNT_CORRECTION
+  DAMAGE
+  THEFT
+  EXPIRATION
+  OTHER
+}
+
+enum DocumentStatus {
+  DRAFT
+  CONFIRMED
+  PARTIALLY_PAID
+  PAID
+  VOID
+  CANCELLED
+}
+
+enum DocumentType {
+  INVOICE
+  CREDIT_NOTE
+  DEBIT_NOTE
+  PURCHASE
+  POS_SALE
+}
+
+enum PaymentMethodType {
+  CASH_USD
+  CASH_VES
+  MOBILE_PAYMENT
+  DEBIT_CARD
+  BANK_TRANSFER
+  ZELLE
+  CREDIT
+}
+
+enum BankAccountType {
+  CHECKING
+  SAVINGS
+  CASH_REGISTER
+  ZELLE
+  MOBILE_PAYMENT
+}
+
+enum BankScope {
+  NATIONAL
+  INTERNATIONAL
+}
+
+enum CashRegisterSessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum AccountReceivableStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+  WRITTEN_OFF
+}
+
+enum AccountPayableStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+}
+
+enum LedgerEntryType {
+  DEBIT
+  CREDIT
+}
+
+// ─── RBAC: USUARIOS, ROLES Y PERMISOS ──────────────────────────────────────
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  username     String     @unique
+  passwordHash String     @map("password_hash")
+  firstName    String     @map("first_name")
+  lastName     String     @map("last_name")
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?  @map("last_login_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  roles                  UserRole[]
+  inventoryMovements     InventoryMovement[]
+  inventoryAdjustments   InventoryAdjustment[]
+  purchasesCreated       Purchase[]            @relation("PurchaseCreatedBy")
+  invoicesCreated        Invoice[]             @relation("InvoiceCreatedBy")
+  cashRegisterSessions   CashRegisterSession[]
+  tasasBCVCreadas        TasaBCV[]             @relation("TasasBCVCreadas")
+  ledgerEntriesCreated   LedgerEntry[]
+  supplierPaymentsCreated SupplierPayment[] @relation("SupplierPaymentsCreated")
+
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  code        RoleCode @unique
+  name        String
+  description String?
+  isSystem    Boolean  @default(true) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String         @id @default(cuid())
+  code        PermissionCode @unique
+  module      String
+  description String
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model UserRole {
+  userId    String   @map("user_id")
+  roleId    String   @map("role_id")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String @map("role_id")
+  permissionId String @map("permission_id")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ─── MULTIMONEDA: TASA BCV (Historial diario) ────────────────────────────────
+
+model TasaBCV {
+  id        String             @id @default(cuid())
+  fecha     DateTime           @unique @db.Date
+  montoBs   Decimal            @db.Decimal(18, 6) // 1 USD = X Bs (tasa BCV)
+  fuente    ExchangeRateSource @default(BCV) @map("source")
+  notas     String?            @map("notes")
+  usuarioId String?            @map("created_by_id")
+  createdAt DateTime           @default(now()) @map("created_at")
+
+  usuario User? @relation("TasasBCVCreadas", fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  @@index([fecha(sort: Desc)])
+  @@map("exchange_rates")
+}
+
+model SystemConfig {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+  label String?
+
+  @@map("system_config")
+}
+
+// ─── CATÁLOGO DE PRODUCTOS ───────────────────────────────────────────────────
+
+model ProductCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  products Product[]
+
+  @@map("product_categories")
+}
+
+model Product {
+  id                 String      @id @default(cuid())
+  sku                String      @unique
+  barcode            String?     @unique
+  name               String
+  description        String?
+  categoryId         String?     @map("category_id")
+  unit               ProductUnit @default(UNIT)
+
+  // Costeo y precio en USD (moneda base)
+  costUsd            Decimal     @default(0) @map("cost_usd") @db.Decimal(18, 4)
+  marginPercent      Decimal     @default(0) @map("margin_percent") @db.Decimal(8, 4)
+  salePriceUsd       Decimal     @default(0) @map("sale_price_usd") @db.Decimal(18, 4)
+
+  // Inventario
+  stock              Decimal     @default(0) @db.Decimal(18, 4)
+  minStock           Decimal     @default(0) @map("min_stock") @db.Decimal(18, 4)
+  maxStock           Decimal?    @map("max_stock") @db.Decimal(18, 4)
+  allowNegativeStock Boolean     @default(false) @map("allow_negative_stock")
+
+  isActive           Boolean     @default(true) @map("is_active")
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
+
+  category           ProductCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  inventoryMovements InventoryMovement[]
+  inventoryAdjustments InventoryAdjustmentLine[]
+  purchaseDetails    PurchaseDetail[]
+  invoiceDetails     InvoiceDetail[]
+
+  @@index([name])
+  @@index([barcode])
+  @@index([isActive, stock])
+  @@map("products")
+}
+
+// ─── KARDEX / INVENTARIO ─────────────────────────────────────────────────────
+
+model InventoryMovement {
+  id              String                @id @default(cuid())
+  productId       String                @map("product_id")
+  movementType    InventoryMovementType @map("movement_type")
+  quantity        Decimal               @db.Decimal(18, 4)
+  unitCostUsd     Decimal               @map("unit_cost_usd") @db.Decimal(18, 4)
+  totalCostUsd    Decimal               @map("total_cost_usd") @db.Decimal(18, 4)
+  stockBefore     Decimal               @map("stock_before") @db.Decimal(18, 4)
+  stockAfter      Decimal               @map("stock_after") @db.Decimal(18, 4)
+  tasaBcvMomento  Decimal?              @map("exchange_rate") @db.Decimal(18, 6)
+
+  referenceType   String?               @map("reference_type")
+  referenceId     String?               @map("reference_id")
+  referenceNumber String?               @map("reference_number")
+  notes           String?
+
+  createdById     String                @map("created_by_id")
+  createdAt       DateTime              @default(now()) @map("created_at")
+
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  createdBy User    @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([productId, createdAt(sort: Desc)])
+  @@index([referenceType, referenceId])
+  @@map("inventory_movements")
+}
+
+model InventoryAdjustment {
+  id          String                    @id @default(cuid())
+  number      String                    @unique
+  reason      InventoryAdjustmentReason
+  notes       String?
+  status      DocumentStatus            @default(CONFIRMED)
+  createdById String                    @map("created_by_id")
+  createdAt   DateTime                  @default(now()) @map("created_at")
+
+  createdBy User                      @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  lines     InventoryAdjustmentLine[]
+
+  @@map("inventory_adjustments")
+}
+
+model InventoryAdjustmentLine {
+  id           String  @id @default(cuid())
+  adjustmentId String  @map("adjustment_id")
+  productId    String  @map("product_id")
+  movementType InventoryMovementType @map("movement_type")
+  quantity     Decimal @db.Decimal(18, 4)
+  unitCostUsd  Decimal @map("unit_cost_usd") @db.Decimal(18, 4)
+  notes        String?
+
+  adjustment InventoryAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  product    Product             @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@map("inventory_adjustment_lines")
+}
+
+// ─── PROVEEDORES Y COMPRAS ───────────────────────────────────────────────────
+
+model Supplier {
+  id           String   @id @default(cuid())
+  rif          String   @unique
+  businessName String   @map("business_name")
+  tradeName    String?  @map("trade_name")
+  address      String?
+  phone        String?
+  email        String?
+  contactName  String?  @map("contact_name")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  purchases        Purchase[]
+  accountsPayable  AccountPayable[]
+
+  @@map("suppliers")
+}
+
+model Purchase {
+  id              String         @id @default(cuid())
+  number          String         @unique
+  supplierId      String         @map("supplier_id")
+  status          DocumentStatus @default(DRAFT)
+  purchaseDate    DateTime       @map("purchase_date") @db.Date
+
+  // Tasa BCV congelada al confirmar la compra (Regla de Oro)
+  tasaBcvMomento  Decimal        @map("exchange_rate") @db.Decimal(18, 6)
+
+  subtotalUsd     Decimal        @map("subtotal_usd") @db.Decimal(18, 4)
+  taxUsd          Decimal        @default(0) @map("tax_usd") @db.Decimal(18, 4)
+  totalUsd        Decimal        @map("total_usd") @db.Decimal(18, 4)
+  subtotalVes     Decimal        @map("subtotal_ves") @db.Decimal(18, 4)
+  taxVes          Decimal        @default(0) @map("tax_ves") @db.Decimal(18, 4)
+  totalVes        Decimal        @map("total_ves") @db.Decimal(18, 4)
+
+  isCredit        Boolean        @default(false) @map("is_credit")
+  dueDate         DateTime?      @map("due_date") @db.Date
+  notes           String?
+
+  // Factura fiscal del proveedor (libro de compras)
+  supplierInvoiceNumber String @default("") @map("supplier_invoice_number")
+  supplierControlNumber String @default("") @map("supplier_control_number")
+
+  createdById     String         @map("created_by_id")
+  confirmedAt     DateTime?      @map("confirmed_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  supplier        Supplier         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  createdBy       User             @relation("PurchaseCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  details         PurchaseDetail[]
+  payments        DocumentPayment[]
+  accountPayable  AccountPayable?
+
+  @@index([purchaseDate(sort: Desc)])
+  @@index([supplierId])
+  @@map("purchases")
+}
+
+model PurchaseDetail {
+  id          String  @id @default(cuid())
+  purchaseId  String  @map("purchase_id")
+  productId   String  @map("product_id")
+  quantity    Decimal @db.Decimal(18, 4)
+  unitCostUsd Decimal @map("unit_cost_usd") @db.Decimal(18, 4)
+  marginPercent Decimal @default(0) @map("margin_percent") @db.Decimal(8, 4)
+  totalUsd    Decimal @map("total_usd") @db.Decimal(18, 4)
+  totalVes    Decimal @map("total_ves") @db.Decimal(18, 4)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@map("purchase_details")
+}
+
+// ─── CLIENTES Y FACTURACIÓN ──────────────────────────────────────────────────
+
+model Customer {
+  id           String   @id @default(cuid())
+  rif          String?  @unique
+  businessName String?  @map("business_name")
+  firstName    String?  @map("first_name")
+  lastName     String?  @map("last_name")
+  address      String?
+  phone        String?
+  email        String?
+  creditLimitUsd Decimal @default(0) @map("credit_limit_usd") @db.Decimal(18, 4)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  invoices            Invoice[]
+  accountsReceivable  AccountReceivable[]
+
+  @@map("customers")
+}
+
+model Invoice {
+  id              String         @id @default(cuid())
+  number          String         @unique
+  documentType    DocumentType   @default(INVOICE) @map("document_type")
+  status          DocumentStatus @default(DRAFT)
+  customerId      String?        @map("customer_id")
+  parentInvoiceId String?        @map("parent_invoice_id")
+
+  // Tasa BCV congelada al momento de la transacción (Regla de Oro)
+  tasaBcvMomento  Decimal        @map("exchange_rate") @db.Decimal(18, 6)
+
+  subtotalUsd     Decimal        @map("subtotal_usd") @db.Decimal(18, 4)
+  discountUsd     Decimal        @default(0) @map("discount_usd") @db.Decimal(18, 4)
+  taxUsd          Decimal        @default(0) @map("tax_usd") @db.Decimal(18, 4)
+  totalUsd        Decimal        @map("total_usd") @db.Decimal(18, 4)
+  subtotalVes     Decimal        @map("subtotal_ves") @db.Decimal(18, 4)
+  discountVes     Decimal        @default(0) @map("discount_ves") @db.Decimal(18, 4)
+  taxVes          Decimal        @default(0) @map("tax_ves") @db.Decimal(18, 4)
+  totalVes        Decimal        @map("total_ves") @db.Decimal(18, 4)
+
+  isCredit        Boolean        @default(false) @map("is_credit")
+  dueDate         DateTime?      @map("due_date") @db.Date
+  notes           String?
+
+  // POS: ventas en espera (Hold)
+  isOnHold        Boolean        @default(false) @map("is_on_hold")
+  holdLabel       String?        @map("hold_label")
+  cashRegisterSessionId String?  @map("cash_register_session_id")
+
+  createdById     String         @map("created_by_id")
+  confirmedAt     DateTime?      @map("confirmed_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  customer              Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  parentInvoice         Invoice?             @relation("InvoiceAdjustments", fields: [parentInvoiceId], references: [id], onDelete: SetNull)
+  childDocuments        Invoice[]            @relation("InvoiceAdjustments")
+  createdBy             User                 @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  cashRegisterSession   CashRegisterSession? @relation(fields: [cashRegisterSessionId], references: [id], onDelete: SetNull)
+  details               InvoiceDetail[]
+  payments              DocumentPayment[]
+  accountReceivable     AccountReceivable?
+
+  @@index([createdAt(sort: Desc)])
+  @@index([customerId])
+  @@index([documentType, status])
+  @@index([isOnHold])
+  @@map("invoices")
+}
+
+model InvoiceDetail {
+  id           String  @id @default(cuid())
+  invoiceId    String  @map("invoice_id")
+  productId    String  @map("product_id")
+  quantity     Decimal @db.Decimal(18, 4)
+
+  // Precios congelados en ambas monedas al momento de la venta
+  unitPriceUsd Decimal @map("unit_price_usd") @db.Decimal(18, 4)
+  unitPriceVes Decimal @map("unit_price_ves") @db.Decimal(18, 4)
+  unitCostUsd  Decimal @map("unit_cost_usd") @db.Decimal(18, 4)
+  discountUsd  Decimal @default(0) @map("discount_usd") @db.Decimal(18, 4)
+  totalUsd     Decimal @map("total_usd") @db.Decimal(18, 4)
+  totalVes     Decimal @map("total_ves") @db.Decimal(18, 4)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@map("invoice_details")
+}
+
+// ─── BANCOS, MÉTODOS DE PAGO Y CAJA ─────────────────────────────────────────
+
+model Bank {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  name      String
+  scope     BankScope @default(NATIONAL)
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  accounts BankAccount[]
+
+  @@map("banks")
+}
+
+model BankAccount {
+  id            String          @id @default(cuid())
+  bankId        String          @map("bank_id")
+  accountNumber String          @map("account_number")
+  accountName   String          @map("account_name")
+  accountType   BankAccountType @map("account_type")
+  currency      CurrencyCode    @default(USD)
+  balance       Decimal         @default(0) @db.Decimal(18, 4)
+  isActive      Boolean         @default(true) @map("is_active")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  bank           Bank              @relation(fields: [bankId], references: [id], onDelete: Restrict)
+  ledgerEntries  LedgerEntry[]
+  documentPayments DocumentPayment[]
+  cashRegisterSessions CashRegisterSession[]
+  supplierPayments   SupplierPayment[]
+
+  @@unique([bankId, accountNumber])
+  @@map("bank_accounts")
+}
+
+model PaymentMethod {
+  id          String            @id @default(cuid())
+  code        String            @unique
+  name        String
+  type        PaymentMethodType
+  currency    CurrencyCode
+  bankAccountId String?         @map("bank_account_id")
+  isActive    Boolean           @default(true) @map("is_active")
+  sortOrder   Int               @default(0) @map("sort_order")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  documentPayments DocumentPayment[]
+  cashCountLines   CashRegisterCountLine[]
+  supplierPayments SupplierPayment[]
+
+  @@map("payment_methods")
+}
+
+model CashRegisterSession {
+  id              String                    @id @default(cuid())
+  sessionNumber   String                    @unique @map("session_number")
+  bankAccountId   String                    @map("bank_account_id")
+  openedById      String                    @map("opened_by_id")
+  status          CashRegisterSessionStatus @default(OPEN)
+
+  openingBalanceUsd Decimal @map("opening_balance_usd") @db.Decimal(18, 4)
+  openingBalanceVes Decimal @map("opening_balance_ves") @db.Decimal(18, 4)
+  closingBalanceUsd Decimal? @map("closing_balance_usd") @db.Decimal(18, 4)
+  closingBalanceVes Decimal? @map("closing_balance_ves") @db.Decimal(18, 4)
+
+  // Totales congelados al cierre (Reporte Z)
+  totalSalesUsd       Decimal? @map("total_sales_usd") @db.Decimal(18, 4)
+  totalSalesVes       Decimal? @map("total_sales_ves") @db.Decimal(18, 4)
+  totalDifferenceUsd  Decimal? @map("total_difference_usd") @db.Decimal(18, 4)
+  totalDifferenceVes  Decimal? @map("total_difference_ves") @db.Decimal(18, 4)
+
+  openedAt  DateTime  @default(now()) @map("opened_at")
+  closedAt  DateTime? @map("closed_at")
+  notes     String?
+
+  bankAccount BankAccount             @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  openedBy    User                    @relation(fields: [openedById], references: [id], onDelete: Restrict)
+  invoices    Invoice[]
+  countLines  CashRegisterCountLine[]
+
+  @@index([status])
+  @@index([openedById, status])
+  @@map("cash_register_sessions")
+}
+
+// CajaArqueoDetalle — desglose por método de pago al cierre
+model CashRegisterCountLine {
+  id                    String  @id @default(cuid())
+  cashRegisterSessionId String  @map("cash_register_session_id")
+  paymentMethodId       String  @map("payment_method_id")
+
+  expectedAmountUsd Decimal @map("expected_amount_usd") @db.Decimal(18, 4)
+  expectedAmountVes Decimal @map("expected_amount_ves") @db.Decimal(18, 4)
+  countedAmountUsd  Decimal @map("counted_amount_usd") @db.Decimal(18, 4)
+  countedAmountVes  Decimal @map("counted_amount_ves") @db.Decimal(18, 4)
+  differenceUsd     Decimal @map("difference_usd") @db.Decimal(18, 4)
+  differenceVes     Decimal @map("difference_ves") @db.Decimal(18, 4)
+
+  session       CashRegisterSession @relation(fields: [cashRegisterSessionId], references: [id], onDelete: Cascade)
+  paymentMethod PaymentMethod       @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+
+  @@unique([cashRegisterSessionId, paymentMethodId])
+  @@map("cash_register_count_lines")
+}
+
+model DocumentPayment {
+  id              String            @id @default(cuid())
+  paymentMethodId String            @map("payment_method_id")
+  bankAccountId   String?           @map("bank_account_id")
+  purchaseId      String?           @map("purchase_id")
+  invoiceId       String?           @map("invoice_id")
+
+  amount          Decimal           @db.Decimal(18, 4)
+  currency        CurrencyCode
+  tasaBcvMomento  Decimal           @map("exchange_rate") @db.Decimal(18, 6)
+  amountUsd       Decimal           @map("amount_usd") @db.Decimal(18, 4)
+  reference       String?
+  paidAt          DateTime          @default(now()) @map("paid_at")
+
+  paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+  bankAccount   BankAccount?  @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  purchase      Purchase?     @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  invoice       Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([paidAt(sort: Desc)])
+  @@map("document_payments")
+}
+
+model LedgerEntry {
+  id            String          @id @default(cuid())
+  bankAccountId String          @map("bank_account_id")
+  entryType     LedgerEntryType @map("entry_type")
+  amount        Decimal         @db.Decimal(18, 4)
+  currency      CurrencyCode
+  balanceAfter  Decimal         @map("balance_after") @db.Decimal(18, 4)
+
+  referenceType String?  @map("reference_type")
+  referenceId   String?  @map("reference_id")
+  description   String
+
+  createdById   String   @map("created_by_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  createdBy   User        @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([bankAccountId, createdAt(sort: Desc)])
+  @@map("ledger_entries")
+}
+
+// ─── CUENTAS POR COBRAR / PAGAR ──────────────────────────────────────────────
+
+model AccountReceivable {
+  id           String                  @id @default(cuid())
+  customerId   String                  @map("customer_id")
+  invoiceId    String                  @unique @map("invoice_id")
+  originalUsd  Decimal                 @map("original_usd") @db.Decimal(18, 4)
+  originalVes  Decimal                 @map("original_ves") @db.Decimal(18, 4)
+  balanceUsd   Decimal                 @map("balance_usd") @db.Decimal(18, 4)
+  balanceVes   Decimal                 @map("balance_ves") @db.Decimal(18, 4)
+  dueDate      DateTime                @map("due_date") @db.Date
+  status       AccountReceivableStatus @default(PENDING)
+  createdAt    DateTime                @default(now()) @map("created_at")
+  updatedAt    DateTime                @updatedAt @map("updated_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  invoice  Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([status, dueDate])
+  @@map("accounts_receivable")
+}
+
+model AccountPayable {
+  id          String               @id @default(cuid())
+  supplierId  String               @map("supplier_id")
+  purchaseId  String               @unique @map("purchase_id")
+
+  // Totales congelados al originar la deuda (Regla de Oro)
+  tasaBcvMomento Decimal           @map("tasa_bcv_momento") @db.Decimal(18, 6)
+  originalUsd    Decimal           @map("original_usd") @db.Decimal(18, 4)
+  originalVes    Decimal           @map("original_ves") @db.Decimal(18, 4)
+  balanceUsd     Decimal           @map("balance_usd") @db.Decimal(18, 4)
+  balanceVes     Decimal           @map("balance_ves") @db.Decimal(18, 4)
+
+  dueDate     DateTime             @map("due_date") @db.Date
+  status      AccountPayableStatus @default(PENDING)
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+
+  supplier         Supplier          @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchase         Purchase          @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  supplierPayments SupplierPayment[]
+
+  @@index([status, dueDate])
+  @@map("accounts_payable")
+}
+
+// Abonos / pagos a proveedores sobre cuentas por pagar
+model SupplierPayment {
+  id               String       @id @default(cuid())
+  accountPayableId String       @map("account_payable_id")
+  bankAccountId    String       @map("bank_account_id")
+  paymentMethodId  String?      @map("payment_method_id")
+
+  amountPaid       Decimal      @map("amount_paid") @db.Decimal(18, 4)
+  currency         CurrencyCode
+
+  amountAppliedUsd Decimal      @map("amount_applied_usd") @db.Decimal(18, 4)
+  amountAppliedVes Decimal      @map("amount_applied_ves") @db.Decimal(18, 4)
+  tasaBcvAbono     Decimal      @map("tasa_bcv_abono") @db.Decimal(18, 6)
+
+  paidAt           DateTime     @default(now()) @map("paid_at")
+  createdById      String?      @map("created_by_id")
+  reference        String?
+  notes            String?
+
+  accountPayable AccountPayable  @relation(fields: [accountPayableId], references: [id], onDelete: Restrict)
+  bankAccount    BankAccount     @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  paymentMethod  PaymentMethod?  @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  createdBy      User?           @relation("SupplierPaymentsCreated", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([accountPayableId])
+  @@index([paidAt(sort: Desc)])
+  @@map("supplier_payments")
+}
+
+// ─── CONFIGURACIÓN DE IMPRESIÓN (TICKETS / FACTURAS) ─────────────────────────
+
+model PrintTemplateConfig {
+  id                   String    @id @default("default")
+  tipoPapel            PaperType @default(TICKET_80MM) @map("tipo_papel")
+
+  nombreEmpresa        String    @default("Donaive") @map("nombre_empresa")
+  rif                  String    @default("")
+  direccion            String    @default("")
+  telefono             String    @default("")
+  mensajePersonalizado String?   @map("mensaje_personalizado")
+
+  mostrarTasaBcv       Boolean   @default(true) @map("mostrar_tasa_bcv")
+  mostrarPreciosBs     Boolean   @default(true) @map("mostrar_precios_bs")
+  mostrarCajero        Boolean   @default(true) @map("mostrar_cajero")
+  mostrarLogo          Boolean   @default(true) @map("mostrar_logo")
+
+  piePagina            String?   @default("Gracias por su compra") @map("pie_pagina")
+
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  @@map("print_template_configs")
+}

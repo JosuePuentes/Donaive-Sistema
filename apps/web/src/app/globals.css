@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --color-background: #f8fafc;
+  --color-foreground: #0f172a;
+  --color-muted: #64748b;
+  --color-muted-foreground: #94a3b8;
+  --color-card: #ffffff;
+  --color-border: #f1f5f9;
+  --color-border-strong: #e2e8f0;
+
+  --color-primary: #4f46e5;
+  --color-primary-hover: #4338ca;
+  --color-primary-foreground: #ffffff;
+  --color-primary-muted: #eef2ff;
+
+  --color-success: #059669;
+  --color-success-bg: #ecfdf5;
+  --color-success-border: #a7f3d0;
+
+  --color-warning: #d97706;
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fde68a;
+
+  --color-danger: #e11d48;
+  --color-danger-bg: #fff1f2;
+  --color-danger-border: #fecdd3;
+
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
+  --shadow-card-hover: 0 4px 6px -1px rgb(15 23 42 / 0.06), 0 2px 4px -2px rgb(15 23 42 / 0.04);
+
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+}
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --muted: #f1f5f9;
+  --border: #e2e8f0;
+  --card: #ffffff;
+  --accent: #4f46e5;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Recharts — tipografía alineada al sistema */
+.recharts-default-legend {
+  font-size: 12px !important;
+  color: #64748b !important;
+}
+
+.recharts-cartesian-axis-tick-value {
+  fill: #94a3b8 !important;
+  font-size: 11px !important;
+}
+
+/* ─── Impresión tickets / Reporte Z ───────────────────────────────────────── */
+@media print {
+  @page {
+    margin: 4mm;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #pos-receipt-print,
+  #pos-receipt-print *,
+  #reporte-z-print,
+  #reporte-z-print * {
+    visibility: visible;
+  }
+
+  #pos-receipt-print,
+  #reporte-z-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    background: white;
+  }
+
+  #pos-receipt-print.print-ticket-80 {
+    width: 80mm;
+    max-width: 80mm;
+    font-size: 11px;
+  }
+
+  #pos-receipt-print.print-ticket-58 {
+    width: 58mm;
+    max-width: 58mm;
+    font-size: 9px;
+  }
+
+  #pos-receipt-print.print-carta {
+    width: 100%;
+    max-width: 190mm;
+    font-size: 12px;
+  }
+
+  #reporte-z-print {
+    width: 100%;
+    max-width: 210mm;
+    padding: 8mm;
+    color: #000;
+  }
+}

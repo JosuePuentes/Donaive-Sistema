@@ -1,0 +1,33 @@
+import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { AppModule } from './app.module';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  app.setGlobalPrefix('api/v1');
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  );
+
+  const configService = app.get(ConfigService);
+  const port = configService.get<number>('API_PORT', 3001);
+  const corsOrigin = configService.get<string>('CORS_ORIGIN', 'http://localhost:3000');
+
+  app.enableCors({
+    origin: corsOrigin,
+    credentials: true,
+  });
+
+  await app.listen(port);
+  console.log(`🚀 API Ferretería Los Puentes corriendo en http://localhost:${port}/api/v1`);
+}
+
+bootstrap();

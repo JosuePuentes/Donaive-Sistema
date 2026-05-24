@@ -1,0 +1,28 @@
+{
+  "name": "ferreteria-los-puentes",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema Administrativo y POS - Ferretería Los Puentes",
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter @flp/api dev\" \"pnpm --filter @flp/web dev\"",
+    "dev:api": "pnpm --filter @flp/api dev",
+    "dev:web": "pnpm --filter @flp/web dev",
+    "build": "pnpm --filter @flp/database generate && pnpm --filter @flp/database build && pnpm --filter @flp/shared build && pnpm -r build",
+    "db:generate": "pnpm --filter @flp/database generate",
+    "db:migrate": "pnpm --filter @flp/database migrate",
+    "db:push": "pnpm --filter @flp/database push",
+    "db:seed": "pnpm --filter @flp/database seed",
+    "db:studio": "pnpm --filter @flp/database studio",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.4"
+}
