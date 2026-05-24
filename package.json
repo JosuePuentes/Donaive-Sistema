@@ -8,10 +8,16 @@
     "dev:api": "pnpm --filter @flp/api dev",
     "dev:web": "pnpm --filter @flp/web dev",
     "build": "pnpm --filter @flp/database generate && pnpm --filter @flp/database build && pnpm --filter @flp/shared build && pnpm -r build",
+    "build:api": "pnpm --filter @flp/database generate && pnpm --filter @flp/database build && pnpm --filter @flp/shared build && pnpm --filter @flp/api build",
+    "build:web": "pnpm --filter @flp/database generate && pnpm --filter @flp/shared build && pnpm --filter @flp/web build",
+    "start:api": "node apps/api/dist/main.js",
+    "start:api:migrate": "pnpm db:migrate:deploy && pnpm start:api",
+    "start:api:render": "pnpm db:push && pnpm db:seed && pnpm start:api",
     "db:generate": "pnpm --filter @flp/database generate",
     "db:migrate": "pnpm --filter @flp/database migrate",
     "db:push": "pnpm --filter @flp/database push",
     "db:seed": "pnpm --filter @flp/database seed",
+    "db:migrate:deploy": "pnpm --filter @flp/database exec prisma migrate deploy",
     "db:studio": "pnpm --filter @flp/database studio",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck"
@@ -21,7 +27,7 @@
     "typescript": "^5.8.3"
   },
   "engines": {
-    "node": ">=20.0.0",
+    "node": "20.x",
     "pnpm": ">=9.0.0"
   },
   "packageManager": "pnpm@9.15.4"
