@@ -29,25 +29,15 @@ async function bootstrap() {
     .filter(Boolean);
 
   app.enableCors({
-    origin: (
-      origin: string | undefined,
-      callback: (err: Error | null, allow?: boolean) => void,
-    ) => {
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-      const allowed =
-        corsOrigins.includes(origin) ||
-        (origin.endsWith('.vercel.app') &&
-          corsOrigins.some((o) => o.includes('vercel.app')));
-      callback(null, allowed);
-    },
+    origin: corsOrigins,
     credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   });
 
   await app.listen(port);
-  console.log(`🚀 API Ferretería Los Puentes corriendo en http://localhost:${port}/api/v1`);
+  console.log(`🚀 API Donaive — puerto ${port}`);
+  console.log(`   CORS: ${corsOrigins.join(' | ')}`);
 }
 
 bootstrap();
