@@ -11,6 +11,7 @@ const emptyForm = {
   sku: '',
   barcode: '',
   name: '',
+  brand: '',
   description: '',
   categoryId: '',
   unit: 'UNIT',
@@ -32,6 +33,17 @@ export default function ProductsPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [categoryName, setCategoryName] = useState('');
+  const [categoryDescription, setCategoryDescription] = useState('');
+  const [savingCategory, setSavingCategory] = useState(false);
+
+  const previewSalePrice =
+    Number(form.costUsd) > 0
+      ? Math.round(Number(form.costUsd) * (1 + Number(form.marginPercent) / 100) * 10000) / 10000
+      : 0;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,6 +74,7 @@ export default function ProductsPage() {
         sku: form.sku,
         barcode: form.barcode || undefined,
         name: form.name,
+        brand: form.brand || undefined,
         description: form.description || undefined,
         categoryId: form.categoryId || undefined,
         unit: form.unit,
@@ -82,6 +95,27 @@ export default function ProductsPage() {
     }
   }
 
+  async function handleCreateCategory(e: React.FormEvent) {
+    e.preventDefault();
+    if (!categoryName.trim()) return;
+    setSavingCategory(true);
+    try {
+      const cat = await productsApi.createCategory(
+        categoryName.trim(),
+        categoryDescription.trim() || undefined,
+      );
+      setCategories((prev) => [...prev, cat].sort((a, b) => a.name.localeCompare(b.name)));
+      setForm((f) => ({ ...f, categoryId: cat.id }));
+      setShowCategoryForm(false);
+      setCategoryName('');
+      setCategoryDescription('');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al crear categoría');
+    } finally {
+      setSavingCategory(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <header className="flex items-center justify-between">
@@ -89,13 +123,55 @@ export default function ProductsPage() {
           <h1 className="text-2xl font-bold">Productos</h1>
           <p className="text-sm text-zinc-500">Catálogo e inventario inicial</p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg text-sm font-medium"
-        >
-          + Nuevo producto
-        </button>
+        <div className="flex gap-2">
+          <label className="px-4 py-2 border border-[var(--border)] rounded-lg text-sm font-medium cursor-pointer hover:bg-[var(--muted)]">
+            Importar Excel/CSV
+            <input
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setImporting(true);
+                setImportResult(null);
+                try {
+                  const text = await file.text();
+                  const rows = parseImportFile(text);
+                  if (rows.length === 0) throw new Error('Archivo vacío o formato incorrecto');
+                  const res = await productsApi.importBulk(rows);
+                  setImportResult(`Importados: ${res.ok}/${res.total}. Fallidos: ${res.failed}`);
+                  await load();
+                } catch (err) {
+                  setImportResult(err instanceof Error ? err.message : 'Error en importación');
+                } finally {
+                  setImporting(false);
+                  e.target.value = '';
+                }
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => setShowCategoryForm(true)}
+            className="px-4 py-2 border border-[var(--border)] rounded-lg text-sm font-medium hover:bg-[var(--muted)]"
+          >
+            + Categoría
+          </button>
+          <button
+            onClick={() => setShowForm(true)}
+            className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg text-sm font-medium"
+          >
+            + Nuevo producto
+          </button>
+        </div>
       </header>
+
+      {importing && <p className="text-sm text-indigo-600">Importando productos...</p>}
+      {importResult && <p className="text-sm text-slate-600">{importResult}</p>}
+      <p className="text-xs text-zinc-500">
+        CSV: código, descripción, marca, costo, utilidad%, stock (columnas separadas por coma o punto y coma)
+      </p>
 
       <div className="flex gap-3 flex-wrap">
         <input
@@ -127,13 +203,13 @@ export default function ProductsPage() {
           <table className="w-full text-sm">
             <thead className="bg-[var(--muted)]">
               <tr>
-                <th className="text-left p-3">SKU</th>
-                <th className="text-left p-3">Producto</th>
-                <th className="text-right p-3">Stock</th>
+                <th className="text-left p-3">Código</th>
+                <th className="text-left p-3">Descripción</th>
+                <th className="text-left p-3">Marca</th>
                 <th className="text-right p-3">Costo USD</th>
+                <th className="text-right p-3">Utilidad %</th>
+                <th className="text-right p-3">Stock</th>
                 <th className="text-right p-3">Precio USD</th>
-                <th className="text-right p-3">Precio Bs</th>
-                <th className="text-center p-3">Estado</th>
                 <th className="text-center p-3">Kardex</th>
               </tr>
             </thead>
@@ -143,25 +219,17 @@ export default function ProductsPage() {
                   <td className="p-3 font-mono text-xs">{p.sku}</td>
                   <td className="p-3">
                     <p className="font-medium">{p.name}</p>
-                    {p.category && (
-                      <p className="text-xs text-zinc-500">{p.category.name}</p>
+                    {p.description && (
+                      <p className="text-xs text-zinc-500 line-clamp-1">{p.description}</p>
                     )}
                   </td>
+                  <td className="p-3 text-slate-600">{p.brand || '—'}</td>
+                  <td className="p-3 text-right">{formatCurrency(p.costUsd)}</td>
+                  <td className="p-3 text-right">{p.marginPercent}%</td>
                   <td className={`p-3 text-right font-medium ${p.isBelowMinStock ? 'text-red-500' : ''}`}>
                     {p.stock}
                   </td>
-                  <td className="p-3 text-right">{formatCurrency(p.costUsd)}</td>
                   <td className="p-3 text-right">{formatCurrency(p.salePriceUsd)}</td>
-                  <td className="p-3 text-right text-[var(--primary)] font-medium">
-                    {p.salePriceVes != null
-                      ? formatCurrency(p.salePriceVes, 'VES')
-                      : '—'}
-                  </td>
-                  <td className="p-3 text-center">
-                    <span className={`px-2 py-0.5 rounded text-xs ${p.isActive ? 'bg-green-100 text-green-700' : 'bg-zinc-100 text-zinc-500'}`}>
-                      {p.isActive ? 'Activo' : 'Inactivo'}
-                    </span>
-                  </td>
                   <td className="p-3 text-center">
                     <Link href={`/inventory/kardex?productId=${p.id}`} className="text-[var(--primary)] hover:underline text-xs">
                       Ver
@@ -181,6 +249,44 @@ export default function ProductsPage() {
         </div>
       )}
 
+      {showCategoryForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[60]">
+          <form
+            onSubmit={handleCreateCategory}
+            className="bg-[var(--background)] border border-[var(--border)] rounded-xl p-6 w-full max-w-sm space-y-4"
+          >
+            <h2 className="text-lg font-bold">Nueva categoría</h2>
+            <Field
+              label="Nombre *"
+              value={categoryName}
+              onChange={setCategoryName}
+              required
+            />
+            <Field
+              label="Descripción"
+              value={categoryDescription}
+              onChange={setCategoryDescription}
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowCategoryForm(false)}
+                className="px-4 py-2 border border-[var(--border)] rounded-lg text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={savingCategory}
+                className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg text-sm disabled:opacity-50"
+              >
+                {savingCategory ? 'Guardando...' : 'Crear categoría'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {showForm && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
           <form
@@ -193,12 +299,22 @@ export default function ProductsPage() {
               <Field label="SKU *" value={form.sku} onChange={(v) => setForm({ ...form, sku: v })} required />
               <Field label="Código de barras" value={form.barcode} onChange={(v) => setForm({ ...form, barcode: v })} />
             </div>
-            <Field label="Nombre *" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
-            <Field label="Descripción" value={form.description} onChange={(v) => setForm({ ...form, description: v })} />
+            <Field label="Descripción (nombre) *" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
+            <Field label="Marca" value={form.brand} onChange={(v) => setForm({ ...form, brand: v })} />
+            <Field label="Detalle adicional" value={form.description} onChange={(v) => setForm({ ...form, description: v })} />
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-sm font-medium">Categoría</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-sm font-medium">Categoría</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowCategoryForm(true)}
+                    className="text-xs text-[var(--primary)] hover:underline"
+                  >
+                    + Nueva categoría
+                  </button>
+                </div>
                 <select
                   value={form.categoryId}
                   onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
@@ -226,8 +342,17 @@ export default function ProductsPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="Costo USD *" type="number" value={String(form.costUsd)} onChange={(v) => setForm({ ...form, costUsd: Number(v) })} required />
-              <Field label="Margen % *" type="number" value={String(form.marginPercent)} onChange={(v) => setForm({ ...form, marginPercent: Number(v) })} required />
+              <Field label="Utilidad % *" type="number" value={String(form.marginPercent)} onChange={(v) => setForm({ ...form, marginPercent: Number(v) })} required />
             </div>
+            {previewSalePrice > 0 && (
+              <p className="text-sm rounded-lg bg-indigo-50 text-indigo-800 px-3 py-2">
+                Precio de venta (lo que verá el POS):{' '}
+                <strong>{formatCurrency(previewSalePrice)}</strong>
+                <span className="text-indigo-600/80 text-xs ml-1">
+                  = costo + {form.marginPercent}% utilidad
+                </span>
+              </p>
+            )}
 
             <div className="grid grid-cols-3 gap-3">
               <Field label="Stock mínimo" type="number" value={String(form.minStock)} onChange={(v) => setForm({ ...form, minStock: Number(v) })} />
@@ -257,6 +382,35 @@ export default function ProductsPage() {
       )}
     </div>
   );
+}
+
+function parseImportFile(text: string) {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return [];
+  const sep = lines[0].includes(';') ? ';' : ',';
+  const header = lines[0].toLowerCase().split(sep).map((h) => h.trim());
+  const idx = (names: string[]) => header.findIndex((h) => names.some((n) => h.includes(n)));
+
+  const iSku = idx(['codigo', 'código', 'sku']);
+  const iName = idx(['descripcion', 'descripción', 'nombre', 'name']);
+  const iBrand = idx(['marca', 'brand']);
+  const iCost = idx(['costo', 'cost']);
+  const iMargin = idx(['utilidad', 'margen', 'margin']);
+  const iStock = idx(['stock', 'cantidad', 'qty']);
+
+  return lines.slice(1).map((line) => {
+    const cols = line.split(sep).map((c) => c.trim().replace(/^"|"$/g, ''));
+    const sku = cols[iSku >= 0 ? iSku : 0] ?? '';
+    const name = cols[iName >= 0 ? iName : 1] ?? sku;
+    return {
+      sku,
+      name,
+      brand: iBrand >= 0 ? cols[iBrand] : undefined,
+      costUsd: Number(cols[iCost >= 0 ? iCost : 3]?.replace(',', '.') || 0),
+      marginPercent: Number(cols[iMargin >= 0 ? iMargin : 4]?.replace(',', '.') || 30),
+      stock: Number(cols[iStock >= 0 ? iStock : 5]?.replace(',', '.') || 0),
+    };
+  }).filter((r) => r.sku && r.name);
 }
 
 function Field({

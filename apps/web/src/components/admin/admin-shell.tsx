@@ -15,6 +15,8 @@ import {
   Printer,
   ClipboardList,
   BarChart3,
+  Users,
+  UserCircle,
   LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
@@ -27,6 +29,7 @@ const navGroups = [
     items: [
       { href: '/dashboard', label: 'Informes', icon: LayoutDashboard },
       { href: '/sales', label: 'Ventas', icon: Receipt },
+      { href: '/admin/clientes', label: 'Clientes', icon: UserCircle },
       { href: '/admin/pagos', label: 'Historial pagos', icon: History },
     ],
   },
@@ -54,8 +57,9 @@ const navGroups = [
     ],
   },
   {
-    label: 'Configuración',
+    label: 'Sistema',
     items: [
+      { href: '/admin/usuarios', label: 'Usuarios', icon: Users },
       { href: '/admin/configuracion/impresion', label: 'Impresión tickets', icon: Printer },
     ],
   },
@@ -100,11 +104,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <div className="p-5 border-b border-slate-100">
           <Link href="/dashboard" className="flex items-center gap-3 group">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white font-bold text-sm shadow-sm shadow-indigo-600/30 transition-transform duration-200 group-hover:scale-105">
-              LP
+              D
             </div>
             <div>
-              <p className="font-semibold text-slate-900 text-sm leading-tight">Ferretería</p>
-              <p className="text-xs text-slate-500">Los Puentes</p>
+              <p className="font-semibold text-slate-900 text-sm leading-tight">Donaive</p>
+              <p className="text-xs text-slate-500">Ferretería Los Puentes</p>
             </div>
           </Link>
         </div>
@@ -155,14 +159,21 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <div className="flex flex-wrap items-center justify-between gap-4 px-4 sm:px-6 lg:px-8 py-4">
             <div className="lg:hidden flex items-center gap-2">
               <div className="h-9 w-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold">
-                LP
+                D
               </div>
-              <span className="font-semibold text-slate-900 text-sm">Ferretería LP</span>
+              <span className="font-semibold text-slate-900 text-sm">Donaive</span>
             </div>
 
-            <div className="flex-1 hidden lg:block" />
+            <div className="flex-1 flex justify-center pointer-events-none">
+              <div className="hidden lg:flex flex-col items-center">
+                <span className="text-lg font-bold tracking-tight text-indigo-700">Donaive</span>
+                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400">
+                  Ferretería Los Puentes
+                </span>
+              </div>
+            </div>
 
-            <div className="flex items-center gap-3 ml-auto">
+            <div className="flex items-center gap-3 ml-auto shrink-0">
               <BcvRateBadge variant="navbar" />
               <Link
                 href="/pos"

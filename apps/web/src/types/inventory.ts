@@ -19,6 +19,7 @@ export interface Product {
   sku: string;
   barcode: string | null;
   name: string;
+  brand: string;
   description: string | null;
   categoryId: string | null;
   category?: { id: string; name: string } | null;
@@ -41,7 +42,7 @@ export interface Product {
 export interface InventoryMovement {
   id: string;
   productId: string;
-  product: { id: string; sku: string; name: string; unit: string };
+  product: { id: string; sku: string; name: string; brand?: string; unit: string };
   movementType: string;
   quantity: number;
   unitCostUsd: number;

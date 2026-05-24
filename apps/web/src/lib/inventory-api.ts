@@ -11,6 +11,7 @@ export interface CreateProductInput {
   sku: string;
   barcode?: string;
   name: string;
+  brand?: string;
   description?: string;
   categoryId?: string;
   unit?: string;
@@ -52,6 +53,21 @@ export const productsApi = {
       method: 'POST',
       body: JSON.stringify({ name, description }),
     }),
+
+  importBulk: (rows: Array<{
+    sku: string;
+    barcode?: string;
+    name: string;
+    brand?: string;
+    description?: string;
+    costUsd: number;
+    marginPercent: number;
+    stock?: number;
+  }>) =>
+    apiFetch<{ total: number; ok: number; failed: number; results: Array<{ sku: string; ok: boolean; error?: string }> }>(
+      '/products/import',
+      { method: 'POST', body: JSON.stringify({ rows }) },
+    ),
 };
 
 export const inventoryApi = {

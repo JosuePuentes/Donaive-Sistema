@@ -17,6 +17,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ListProductsQueryDto } from './dto/list-products.dto';
 import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
+import { ImportProductRowDto } from './dto/import-products.dto';
 
 @Injectable()
 export class ProductsService {
@@ -37,6 +38,7 @@ export class ProductsService {
         { name: { contains: query.search, mode: 'insensitive' } },
         { sku: { contains: query.search, mode: 'insensitive' } },
         { barcode: { contains: query.search, mode: 'insensitive' } },
+        { brand: { contains: query.search, mode: 'insensitive' } },
       ];
     }
 
@@ -128,6 +130,7 @@ export class ProductsService {
           sku: dto.sku,
           barcode: dto.barcode,
           name: dto.name,
+          brand: dto.brand ?? '',
           description: dto.description,
           categoryId: dto.categoryId,
           unit: dto.unit,
@@ -256,6 +259,58 @@ export class ProductsService {
     return this.prisma.productCategory.update({ where: { id }, data: dto });
   }
 
+  async importBulk(rows: ImportProductRowDto[], userId: string) {
+    const results: Array<{ sku: string; ok: boolean; error?: string }> = [];
+
+    for (const row of rows) {
+      try {
+        const existing = await this.prisma.product.findUnique({ where: { sku: row.sku } });
+        if (existing) {
+          const costUsd = row.costUsd;
+          const marginPercent = row.marginPercent;
+          const salePriceUsd = calculateSalePriceUsd(costUsd, marginPercent);
+          await this.prisma.product.update({
+            where: { id: existing.id },
+            data: {
+              name: row.name,
+              brand: row.brand ?? existing.brand ?? '',
+              barcode: row.barcode ?? existing.barcode,
+              description: row.description ?? existing.description,
+              costUsd,
+              marginPercent,
+              salePriceUsd,
+            },
+          });
+          results.push({ sku: row.sku, ok: true });
+        } else {
+          await this.create(
+            {
+              sku: row.sku,
+              barcode: row.barcode,
+              name: row.name,
+              brand: row.brand,
+              description: row.description,
+              costUsd: row.costUsd,
+              marginPercent: row.marginPercent,
+              initialStock: row.stock ?? 0,
+            },
+            userId,
+          );
+          results.push({ sku: row.sku, ok: true });
+        }
+      } catch (err) {
+        results.push({
+          sku: row.sku,
+          ok: false,
+          error: err instanceof Error ? err.message : 'Error desconocido',
+        });
+      }
+    }
+
+    const ok = results.filter((r) => r.ok).length;
+    return { total: rows.length, ok, failed: rows.length - ok, results };
+  }
+
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
   private mapProduct(product: {
@@ -263,6 +318,7 @@ export class ProductsService {
     sku: string;
     barcode: string | null;
     name: string;
+    brand: string | null;
     description: string | null;
     categoryId: string | null;
     unit: string;
@@ -286,6 +342,7 @@ export class ProductsService {
       sku: product.sku,
       barcode: product.barcode,
       name: product.name,
+      brand: product.brand ?? '',
       description: product.description,
       categoryId: product.categoryId,
       category: product.category,

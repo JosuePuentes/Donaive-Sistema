@@ -319,6 +319,7 @@ model Product {
   sku                String      @unique
   barcode            String?     @unique
   name               String
+  brand              String?     @default("")
   description        String?
   categoryId         String?     @map("category_id")
   unit               ProductUnit @default(UNIT)
@@ -496,7 +497,7 @@ model Customer {
   firstName    String?  @map("first_name")
   lastName     String?  @map("last_name")
   address      String?
-  phone        String?
+  phone        String
   email        String?
   creditLimitUsd Decimal @default(0) @map("credit_limit_usd") @db.Decimal(18, 4)
   isActive     Boolean  @default(true) @map("is_active")

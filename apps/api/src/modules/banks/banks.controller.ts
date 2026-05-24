@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
 import { BanksService } from './banks.service';
 import { CreateBankDto, CreateBankAccountDto } from './dto/bank.dto';
+import { CreatePaymentMethodDto } from './dto/payment-method.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
@@ -38,5 +39,11 @@ export class BanksController {
   @RequirePermissions('BANKS_VIEW', 'POS_ACCESS')
   findPaymentMethods() {
     return this.banksService.findAllPaymentMethods();
+  }
+
+  @Post('payment-methods')
+  @RequirePermissions('BANKS_MANAGE', 'PAYMENT_METHODS_MANAGE')
+  createPaymentMethod(@Body() dto: CreatePaymentMethodDto) {
+    return this.banksService.createPaymentMethod(dto);
   }
 }

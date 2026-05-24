@@ -25,6 +25,11 @@ export class CreateProductDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
+  brand?: string;
+
+  @IsOptional()
+  @IsString()
   description?: string;
 
   @IsOptional()
@@ -78,6 +83,11 @@ export class UpdateProductDto {
   @IsString()
   @MaxLength(200)
   name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  brand?: string;
 
   @IsOptional()
   @IsString()

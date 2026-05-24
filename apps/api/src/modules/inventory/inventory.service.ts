@@ -63,7 +63,7 @@ export class InventoryService {
       this.prisma.inventoryMovement.findMany({
         where,
         include: {
-          product: { select: { id: true, sku: true, name: true, unit: true } },
+          product: { select: { id: true, sku: true, name: true, brand: true, unit: true } },
           createdBy: { select: { id: true, firstName: true, lastName: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -93,7 +93,7 @@ export class InventoryService {
           createdBy: { select: { id: true, firstName: true, lastName: true } },
           lines: {
             include: {
-              product: { select: { id: true, sku: true, name: true } },
+              product: { select: { id: true, sku: true, name: true, brand: true } },
             },
           },
         },
@@ -117,7 +117,7 @@ export class InventoryService {
         createdBy: { select: { id: true, firstName: true, lastName: true } },
         lines: {
           include: {
-            product: { select: { id: true, sku: true, name: true, unit: true } },
+            product: { select: { id: true, sku: true, name: true, brand: true, unit: true } },
           },
         },
       },

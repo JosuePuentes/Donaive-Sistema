@@ -28,6 +28,7 @@ import type { PosChangeInput, PosPaymentInput } from '@flp/shared';
 import type { Product } from '@/types/inventory';
 import type { PosSaleReceipt } from '@/types/pos-receipt';
 import { PosReceiptPrint } from '@/components/print/pos-receipt-print';
+import { PosCustomerPanel, type PosCustomer } from '@/components/pos/pos-customer-panel';
 
 interface PaymentMethod extends PosPaymentMethod {}
 
@@ -53,6 +54,7 @@ export default function PosPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [lastSale, setLastSale] = useState<PosSaleReceipt | null>(null);
   const [receiptToPrint, setReceiptToPrint] = useState<PosSaleReceipt | null>(null);
+  const [customer, setCustomer] = useState<PosCustomer | null>(null);
 
   const refreshEstado = useCallback(async () => {
     const estado = await cajaApi.estadoActual();
@@ -96,7 +98,8 @@ export default function PosPage() {
     (p) =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.sku.toLowerCase().includes(search.toLowerCase()) ||
-      (p.barcode ?? '').includes(search),
+      (p.barcode ?? '').includes(search) ||
+      (p.brand ?? '').toLowerCase().includes(search.toLowerCase()),
   );
 
   function addToCart(product: Product) {
@@ -142,11 +145,13 @@ export default function PosPage() {
           lines: cart.map((l) => ({ productId: l.product.id, quantity: l.quantity })),
           payments: payload.payments,
           change: payload.change,
+          customerId: customer?.id,
         }),
       });
       setLastSale(result);
       setReceiptToPrint(result);
       setCart([]);
+      setCustomer(null);
       setShowPaymentModal(false);
       await refreshEstado();
     } catch (err) {
@@ -291,7 +296,8 @@ export default function PosPage() {
 
       <div className="flex flex-col md:flex-row h-full min-h-0">
         <aside className="w-full md:w-[min(420px,38vw)] md:max-w-[420px] md:shrink-0 flex flex-col border-b md:border-b-0 md:border-r border-slate-200/80 bg-white md:max-h-full max-h-[42vh] md:max-h-none order-2 md:order-1">
-          <div className="shrink-0 px-5 py-4 border-b border-slate-100">
+          <div className="shrink-0 px-5 py-4 border-b border-slate-100 space-y-3">
+            <PosCustomerPanel customer={customer} onSelect={setCustomer} />
             <div className="flex items-center gap-2">
               <ShoppingCart className="h-5 w-5 text-indigo-600" />
               <h2 className="font-bold text-slate-900 tracking-tight">Factura actual</h2>
@@ -329,7 +335,10 @@ export default function PosPage() {
                         <p className="font-medium text-sm text-slate-900 truncate leading-snug">
                           {l.product.name}
                         </p>
-                        <p className="text-xs text-slate-400 font-mono">{l.product.sku}</p>
+                        <p className="text-xs text-slate-400 font-mono">
+                          {l.product.sku}
+                          {l.product.brand ? ` · ${l.product.brand}` : ''}
+                        </p>
                         <div className="flex items-center gap-1.5 mt-2">
                           <button
                             type="button"
@@ -452,6 +461,9 @@ export default function PosPage() {
                     {p.name}
                   </p>
                   <p className="text-[11px] font-mono text-slate-400 mt-1 truncate">{p.sku}</p>
+                  {p.brand && (
+                    <p className="text-[11px] text-slate-500 truncate">{p.brand}</p>
+                  )}
                   <p className="text-lg font-bold tabular-nums text-slate-900 mt-3">
                     {formatCurrency(p.salePriceUsd)}
                   </p>

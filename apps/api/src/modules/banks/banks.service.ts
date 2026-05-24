@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateBankDto, CreateBankAccountDto } from './dto/bank.dto';
+import { CreatePaymentMethodDto } from './dto/payment-method.dto';
 
 @Injectable()
 export class BanksService {
@@ -46,6 +47,29 @@ export class BanksService {
     return this.prisma.paymentMethod.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: 'asc' },
+    });
+  }
+
+  async createPaymentMethod(dto: CreatePaymentMethodDto) {
+    const existing = await this.prisma.paymentMethod.findUnique({ where: { code: dto.code } });
+    if (existing) throw new ConflictException(`Método ${dto.code} ya existe`);
+
+    if (dto.bankAccountId) {
+      const account = await this.prisma.bankAccount.findUnique({
+        where: { id: dto.bankAccountId },
+      });
+      if (!account) throw new NotFoundException('Cuenta bancaria no encontrada');
+    }
+
+    return this.prisma.paymentMethod.create({
+      data: {
+        code: dto.code,
+        name: dto.name,
+        type: dto.type,
+        currency: dto.currency,
+        bankAccountId: dto.bankAccountId,
+        sortOrder: dto.sortOrder ?? 0,
+      },
     });
   }
 }

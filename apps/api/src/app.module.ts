@@ -15,6 +15,8 @@ import { CajaModule } from './modules/caja/caja.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { CustomersModule } from './modules/customers/customers.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
@@ -37,6 +39,8 @@ import { SettingsModule } from './modules/settings/settings.module';
     ReportsModule,
     PaymentsModule,
     SettingsModule,
+    CustomersModule,
+    UsersModule,
   ],
 })
 export class AppModule {}

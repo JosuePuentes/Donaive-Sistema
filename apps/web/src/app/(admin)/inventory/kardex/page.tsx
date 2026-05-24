@@ -60,13 +60,19 @@ function KardexContent() {
           >
             <option value="">Todos los productos</option>
             {products.map((p) => (
-              <option key={p.id} value={p.id}>{p.sku} — {p.name}</option>
+              <option key={p.id} value={p.id}>
+                {p.sku} — {p.name}{p.brand ? ` (${p.brand})` : ''}
+              </option>
             ))}
           </select>
         </div>
         {selectedProduct && (
-          <div className="text-sm bg-[var(--muted)] px-4 py-2 rounded-lg">
-            Stock actual: <strong>{selectedProduct.stock}</strong>
+          <div className="text-sm bg-[var(--muted)] px-4 py-3 rounded-lg space-y-1">
+            <p><span className="text-zinc-500">Código:</span> <strong className="font-mono">{selectedProduct.sku}</strong></p>
+            <p><span className="text-zinc-500">Descripción:</span> <strong>{selectedProduct.name}</strong></p>
+            <p><span className="text-zinc-500">Marca:</span> {selectedProduct.brand || '—'}</p>
+            <p><span className="text-zinc-500">Costo:</span> {formatCurrency(selectedProduct.costUsd)} · <span className="text-zinc-500">Utilidad:</span> {selectedProduct.marginPercent}%</p>
+            <p><span className="text-zinc-500">Stock:</span> <strong>{selectedProduct.stock}</strong></p>
           </div>
         )}
         <button

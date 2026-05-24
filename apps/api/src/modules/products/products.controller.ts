@@ -14,6 +14,7 @@ import { ProductsService } from './products.service';
 import { CreateProductDto, UpdateProductDto } from './dto/create-product.dto';
 import { ListProductsQueryDto } from './dto/list-products.dto';
 import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
+import { ImportProductsDto } from './dto/import-products.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
@@ -61,6 +62,12 @@ export class ProductsController {
   @RequirePermissions('PRODUCTS_VIEW')
   findOne(@Param('id') id: string) {
     return this.productsService.findOne(id);
+  }
+
+  @Post('import')
+  @RequirePermissions('PRODUCTS_MANAGE')
+  importBulk(@Body() dto: ImportProductsDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.productsService.importBulk(dto.rows, user.id);
   }
 
   @Post()
