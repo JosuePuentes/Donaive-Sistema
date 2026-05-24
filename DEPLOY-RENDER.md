@@ -34,3 +34,25 @@ Render detecta **pnpm** por `packageManager` en `package.json`.
 ## Tras cambios en GitHub
 
 Haz **Manual Deploy** o espera auto-deploy en `main`.
+
+---
+
+# Frontend en Vercel (Next.js)
+
+**No despliegues `apps/api` en Vercel** — la API va en Render.
+
+| Campo en Vercel | Valor |
+|-----------------|--------|
+| **Framework** | Next.js |
+| **Root Directory** | `apps/web` |
+| **Install Command** | (dejar vacío — usa `apps/web/vercel.json`) |
+
+**Environment variable:**
+
+| Variable | Valor |
+|----------|--------|
+| `NEXT_PUBLIC_API_URL` | `https://donaive-sistema.onrender.com/api/v1` |
+
+En Render (API), `CORS_ORIGIN` = `https://tu-proyecto.vercel.app`
+
+Activa en Vercel: **Include source files outside of the Root Directory** (monorepo).
