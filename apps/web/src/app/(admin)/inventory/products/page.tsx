@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { productsApi } from '@/lib/inventory-api';
+import { parseProductImportFile } from '@/lib/product-import-parser';
 import { formatCurrency } from '@/lib/format-currency';
 import type { Product, ProductCategory } from '@/types/inventory';
 import { PRODUCT_UNITS } from '@/types/inventory';
@@ -136,11 +137,22 @@ export default function ProductsPage() {
                 setImporting(true);
                 setImportResult(null);
                 try {
-                  const text = await file.text();
-                  const rows = parseImportFile(text);
-                  if (rows.length === 0) throw new Error('Archivo vacío o formato incorrecto');
+                  const rows = await parseProductImportFile(file);
+                  if (rows.length === 0) {
+                    throw new Error(
+                      'No se leyeron productos. Use Excel (.xlsx) o CSV con encabezados: codigo, descripcion, marca, costo, utilidad, stock',
+                    );
+                  }
                   const res = await productsApi.importBulk(rows);
-                  setImportResult(`Importados: ${res.ok}/${res.total}. Fallidos: ${res.failed}`);
+                  const failedDetail = res.results
+                    .filter((r) => !r.ok)
+                    .slice(0, 5)
+                    .map((r) => `${r.sku}: ${r.error ?? 'error'}`)
+                    .join(' · ');
+                  setImportResult(
+                    `Importados: ${res.ok}/${res.total}. Fallidos: ${res.failed}` +
+                      (failedDetail ? ` (${failedDetail})` : ''),
+                  );
                   await load();
                 } catch (err) {
                   setImportResult(err instanceof Error ? err.message : 'Error en importación');
@@ -170,7 +182,8 @@ export default function ProductsPage() {
       {importing && <p className="text-sm text-indigo-600">Importando productos...</p>}
       {importResult && <p className="text-sm text-slate-600">{importResult}</p>}
       <p className="text-xs text-zinc-500">
-        CSV: código, descripción, marca, costo, utilidad%, stock (columnas separadas por coma o punto y coma)
+        Excel (.xlsx) o CSV. Columnas: codigo, descripcion, marca, costo, utilidad, stock. La utilidad puede ir como{' '}
+        <strong>30</strong> o <strong>30%</strong> (porcentaje sobre el costo).
       </p>
 
       <div className="flex gap-3 flex-wrap">
@@ -382,35 +395,6 @@ export default function ProductsPage() {
       )}
     </div>
   );
-}
-
-function parseImportFile(text: string) {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length < 2) return [];
-  const sep = lines[0].includes(';') ? ';' : ',';
-  const header = lines[0].toLowerCase().split(sep).map((h) => h.trim());
-  const idx = (names: string[]) => header.findIndex((h) => names.some((n) => h.includes(n)));
-
-  const iSku = idx(['codigo', 'código', 'sku']);
-  const iName = idx(['descripcion', 'descripción', 'nombre', 'name']);
-  const iBrand = idx(['marca', 'brand']);
-  const iCost = idx(['costo', 'cost']);
-  const iMargin = idx(['utilidad', 'margen', 'margin']);
-  const iStock = idx(['stock', 'cantidad', 'qty']);
-
-  return lines.slice(1).map((line) => {
-    const cols = line.split(sep).map((c) => c.trim().replace(/^"|"$/g, ''));
-    const sku = cols[iSku >= 0 ? iSku : 0] ?? '';
-    const name = cols[iName >= 0 ? iName : 1] ?? sku;
-    return {
-      sku,
-      name,
-      brand: iBrand >= 0 ? cols[iBrand] : undefined,
-      costUsd: Number(cols[iCost >= 0 ? iCost : 3]?.replace(',', '.') || 0),
-      marginPercent: Number(cols[iMargin >= 0 ? iMargin : 4]?.replace(',', '.') || 30),
-      stock: Number(cols[iStock >= 0 ? iStock : 5]?.replace(',', '.') || 0),
-    };
-  }).filter((r) => r.sku && r.name);
 }
 
 function Field({

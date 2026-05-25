@@ -269,6 +269,9 @@ export class ProductsService {
           const costUsd = row.costUsd;
           const marginPercent = row.marginPercent;
           const salePriceUsd = calculateSalePriceUsd(costUsd, marginPercent);
+          const stockUpdate =
+            row.stock != null && row.stock > 0 ? { stock: row.stock } : {};
+
           await this.prisma.product.update({
             where: { id: existing.id },
             data: {
@@ -279,6 +282,7 @@ export class ProductsService {
               costUsd,
               marginPercent,
               salePriceUsd,
+              ...stockUpdate,
             },
           });
           results.push({ sku: row.sku, ok: true });

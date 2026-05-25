@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import {
   IsArray,
   IsString,
@@ -8,6 +8,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
+import { parseImportNumber } from '../../../common/utils/parse-import-number';
 
 export class ImportProductRowDto {
   @IsString()
@@ -32,15 +33,22 @@ export class ImportProductRowDto {
   @IsString()
   description?: string;
 
+  @Transform(({ value }) => parseImportNumber(value, 0))
   @IsNumber()
   @Min(0)
   costUsd!: number;
 
+  @Transform(({ value }) => {
+    let n = parseImportNumber(value, 30);
+    if (n > 0 && n <= 1) n = n * 100;
+    return n;
+  })
   @IsNumber()
   @Min(0)
   marginPercent!: number;
 
   @IsOptional()
+  @Transform(({ value }) => (value == null ? undefined : parseImportNumber(value, 0)))
   @IsNumber()
   @Min(0)
   stock?: number;
