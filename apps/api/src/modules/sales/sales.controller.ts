@@ -12,6 +12,12 @@ import type { AuthenticatedUser } from '../../common/interfaces/authenticated-us
 export class SalesController {
   constructor(private readonly salesService: SalesService) {}
 
+  @Get('sales/resumen')
+  @RequirePermissions('INVOICES_VIEW', 'REPORTS_DAILY_SALES')
+  getVentasResumen() {
+    return this.salesService.getVentasResumen();
+  }
+
   @Get('sales')
   @RequirePermissions('INVOICES_VIEW', 'REPORTS_DAILY_SALES')
   findRecentSales() {

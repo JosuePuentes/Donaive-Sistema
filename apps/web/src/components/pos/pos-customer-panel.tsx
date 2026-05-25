@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { User, UserPlus, X } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
+import { customerDisplayName } from '@/lib/customer-display';
 
 export interface PosCustomer {
   id: string;
@@ -17,11 +18,6 @@ export interface PosCustomer {
 interface PosCustomerPanelProps {
   customer: PosCustomer | null;
   onSelect: (customer: PosCustomer | null) => void;
-}
-
-function displayName(c: PosCustomer) {
-  if (c.businessName) return c.businessName;
-  return [c.firstName, c.lastName].filter(Boolean).join(' ') || c.phone;
 }
 
 export function PosCustomerPanel({ customer, onSelect }: PosCustomerPanelProps) {
@@ -84,7 +80,7 @@ export function PosCustomerPanel({ customer, onSelect }: PosCustomerPanelProps) 
       <div className="flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50/80 px-3 py-2">
         <User className="h-4 w-4 text-indigo-600 shrink-0" />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-slate-900 truncate">{displayName(customer)}</p>
+          <p className="text-sm font-semibold text-slate-900 truncate">{customerDisplayName(customer)}</p>
           <p className="text-xs text-slate-500">{customer.phone}</p>
         </div>
         <button
@@ -125,7 +121,7 @@ export function PosCustomerPanel({ customer, onSelect }: PosCustomerPanelProps) 
                 }}
                 className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 border-b border-slate-50 last:border-0"
               >
-                <span className="font-medium">{displayName(c)}</span>
+                <span className="font-medium">{customerDisplayName(c)}</span>
                 <span className="text-slate-400 ml-2">{c.phone}</span>
               </button>
             </li>
@@ -145,18 +141,6 @@ export function PosCustomerPanel({ customer, onSelect }: PosCustomerPanelProps) 
             required
             className="w-full px-2 py-1.5 border border-slate-200 rounded-lg"
           />
-          <input
-            placeholder="RIF"
-            value={form.rif}
-            onChange={(e) => setForm({ ...form, rif: e.target.value })}
-            className="w-full px-2 py-1.5 border border-slate-200 rounded-lg"
-          />
-          <input
-            placeholder="Razón social"
-            value={form.businessName}
-            onChange={(e) => setForm({ ...form, businessName: e.target.value })}
-            className="w-full px-2 py-1.5 border border-slate-200 rounded-lg"
-          />
           <div className="grid grid-cols-2 gap-2">
             <input
               placeholder="Nombre"
@@ -171,6 +155,12 @@ export function PosCustomerPanel({ customer, onSelect }: PosCustomerPanelProps) 
               className="px-2 py-1.5 border border-slate-200 rounded-lg"
             />
           </div>
+          <input
+            placeholder="RIF (opcional)"
+            value={form.rif}
+            onChange={(e) => setForm({ ...form, rif: e.target.value })}
+            className="w-full px-2 py-1.5 border border-slate-200 rounded-lg"
+          />
           <div className="flex gap-2">
             <Button type="submit" size="sm" disabled={saving}>
               {saving ? 'Guardando...' : 'Guardar'}

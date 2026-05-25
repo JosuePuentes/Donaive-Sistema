@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { productsApi } from '@/lib/inventory-api';
-import { parseProductImportFile } from '@/lib/product-import-parser';
 import { formatCurrency } from '@/lib/format-currency';
 import type { Product, ProductCategory } from '@/types/inventory';
 import { PRODUCT_UNITS } from '@/types/inventory';
@@ -34,6 +33,10 @@ export default function ProductsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const PAGE_SIZE = 50;
+  const [searchDebounced, setSearchDebounced] = useState('');
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -66,26 +69,38 @@ export default function ProductsPage() {
       ? Math.round(Number(form.costUsd) * (1 + Number(form.marginPercent) / 100) * 10000) / 10000
       : 0;
 
+  useEffect(() => {
+    const t = setTimeout(() => setSearchDebounced(search), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchDebounced, lowStockOnly]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
       const [prodRes, cats] = await Promise.all([
-        productsApi.listAll({
-          ...(search ? { search } : {}),
+        productsApi.list({
+          page,
+          limit: PAGE_SIZE,
+          ...(searchDebounced ? { search: searchDebounced } : {}),
           ...(lowStockOnly ? { lowStock: true } : {}),
         }),
         productsApi.categories(),
       ]);
       setProducts(prodRes.data);
       setTotalCount(prodRes.meta.total);
+      setTotalPages(prodRes.meta.totalPages);
       setCategories(cats);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al cargar productos');
     } finally {
       setLoading(false);
     }
-  }, [search, lowStockOnly]);
+  }, [searchDebounced, lowStockOnly, page]);
 
   useEffect(() => {
     load();
@@ -198,6 +213,7 @@ export default function ProductsPage() {
                 setImportResult(null);
                 setImportPreview(null);
                 try {
+                  const { parseProductImportFile } = await import('@/lib/product-import-parser');
                   const rows = await parseProductImportFile(file);
                   if (rows.length === 0) {
                     throw new Error(
@@ -320,6 +336,32 @@ export default function ProductsPage() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm">
+          <p className="text-zinc-500">
+            Página {page} de {totalPages} · {totalCount} productos
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={page <= 1 || loading}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="px-3 py-1.5 border rounded-lg disabled:opacity-40"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              disabled={page >= totalPages || loading}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="px-3 py-1.5 border rounded-lg disabled:opacity-40"
+            >
+              Siguiente
+            </button>
+          </div>
         </div>
       )}
 

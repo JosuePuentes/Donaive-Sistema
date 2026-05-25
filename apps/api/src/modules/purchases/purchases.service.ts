@@ -280,7 +280,7 @@ export class PurchasesService {
           },
         });
 
-        await this.treasuryService.applyMovement(tx, bankAccount.id, -Number(paymentAmount));
+        await this.treasuryService.recordMovement(tx, paymentMethod.id, -Number(paymentAmount));
       }
 
       return purchase;

@@ -1,4 +1,6 @@
 export interface DashboardKpis {
+  ventasDiaUsd: number;
+  ventasDiaTransacciones: number;
   ventasMesUsd: number;
   ventasMesVes: number;
   margenUtilidadPromedio: number;

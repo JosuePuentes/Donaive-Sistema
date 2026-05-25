@@ -1,4 +1,5 @@
 import { apiFetch } from './api-client';
+import { customerDisplayName } from './customer-display';
 import { inventoryApi } from './inventory-api';
 import { reportsApi } from './reports-api';
 import type { ExportBancosResponse, ExportRowsResponse } from './reports-api';
@@ -69,7 +70,9 @@ export async function fetchClientesExport() {
       rows: rows.map(
         (c): Record<string, string | number> => ({
           rif: c.rif ?? '',
-          nombre: c.businessName || [c.firstName, c.lastName].filter(Boolean).join(' ') || '',
+          nombre: c.firstName ?? '',
+          apellido: c.lastName ?? '',
+          nombreCompleto: customerDisplayName(c),
           telefono: c.phone,
           email: c.email ?? '',
           limiteCreditoUsd: c.creditLimitUsd,
@@ -153,7 +156,7 @@ export async function fetchBancosExport(): Promise<ExportBancosResponse> {
     const [banks, accounts, methods] = await Promise.all([
       apiFetch<Array<{ code: string; name: string }>>('/banks'),
       apiFetch<Array<{ accountNumber: string; accountName: string; currency: string; balance: number; bank: { code: string } }>>('/bank-accounts'),
-      apiFetch<Array<{ code: string; name: string; type: string; currency: string }>>('/payment-methods'),
+      apiFetch<Array<{ code: string; name: string; type: string; currency: string; balance: number }>>('/payment-methods'),
     ]);
     return {
       bancos: banks.map((b) => ({ codigo: b.code, nombre: b.name })),
@@ -169,6 +172,7 @@ export async function fetchBancosExport(): Promise<ExportBancosResponse> {
         nombre: m.name,
         tipo: m.type,
         moneda: m.currency,
+        saldoDisponible: Number(m.balance),
       })),
     };
   }

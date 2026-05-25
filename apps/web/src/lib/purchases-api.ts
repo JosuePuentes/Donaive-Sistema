@@ -3,6 +3,7 @@ import type {
   Supplier,
   Purchase,
   BankAccount,
+  PaymentMethodTreasury,
   CreateSupplierInput,
   CreatePurchaseInput,
   CxpResumen,
@@ -34,6 +35,7 @@ export const purchasesApi = {
 
 export const banksApi = {
   accounts: () => apiFetch<BankAccount[]>('/bank-accounts'),
+  paymentMethods: () => apiFetch<PaymentMethodTreasury[]>('/payment-methods'),
 };
 
 export const pricingApi = {

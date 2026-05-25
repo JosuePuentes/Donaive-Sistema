@@ -15,32 +15,52 @@ import { TransactionFreezeService } from '../../common/services/transaction-free
 
 @Injectable()
 export class ReportsService {
+  private lastOverdueMarkAt = 0;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly transactionFreeze: TransactionFreezeService,
   ) {}
 
-  async getDashboardSummary() {
+  private async maybeMarkOverdueAccounts(): Promise<void> {
+    const now = Date.now();
+    if (now - this.lastOverdueMarkAt < 5 * 60 * 1000) return;
+    this.lastOverdueMarkAt = now;
     await this.markOverdueAccounts();
+  }
+
+  async getDashboardSummary() {
+    await this.maybeMarkOverdueAccounts();
 
     const now = new Date();
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfWeek = new Date(now);
     endOfWeek.setDate(endOfWeek.getDate() + 7);
 
-    const [monthInvoices, lowStockCount, cxpWeek, bankBalances, tasaBcv] =
+    const salesBase = {
+      status: 'CONFIRMED' as const,
+      documentType: { in: ['INVOICE', 'POS_SALE'] as const },
+    };
+
+    const monthWhere = { ...salesBase, confirmedAt: { gte: startOfMonth } };
+    const dayWhere = { ...salesBase, confirmedAt: { gte: startOfDay } };
+
+    const [monthTotals, dayPayments, monthDetails, lowStockCount, cxpWeek, bankBalances, tasaBcv] =
       await Promise.all([
-        this.prisma.invoice.findMany({
-          where: {
-            status: 'CONFIRMED',
-            documentType: { in: ['INVOICE', 'POS_SALE'] },
-            confirmedAt: { gte: startOfMonth },
-          },
-          select: {
-            totalUsd: true,
-            totalVes: true,
-            details: { select: { totalUsd: true, unitCostUsd: true, quantity: true } },
-          },
+        this.prisma.invoice.aggregate({
+          where: monthWhere,
+          _sum: { totalUsd: true, totalVes: true },
+        }),
+        this.prisma.documentPayment.aggregate({
+          where: { invoice: dayWhere },
+          _sum: { amountUsd: true },
+          _count: true,
+        }),
+        this.prisma.invoiceDetail.findMany({
+          where: { invoice: monthWhere },
+          select: { totalUsd: true, unitCostUsd: true, quantity: true },
         }),
         this.countLowStock(),
         this.prisma.accountPayable.aggregate({
@@ -59,27 +79,26 @@ export class ReportsService {
         this.transactionFreeze.getTasaBcvMomento(),
       ]);
 
-    let ventasMesUsd = 0;
-    let ventasMesVes = 0;
+    let ventasMesUsd = Number(monthTotals._sum.totalUsd ?? 0);
+    let ventasMesVes = Number(monthTotals._sum.totalVes ?? 0);
     let utilidadMesUsd = 0;
 
-    for (const inv of monthInvoices) {
-      ventasMesUsd += Number(inv.totalUsd);
-      ventasMesVes += Number(inv.totalVes);
-      for (const d of inv.details) {
-        utilidadMesUsd += calculateLineGrossProfit(
-          Number(d.totalUsd),
-          Number(d.unitCostUsd),
-          Number(d.quantity),
-        );
-      }
+    for (const d of monthDetails) {
+      utilidadMesUsd += calculateLineGrossProfit(
+        Number(d.totalUsd),
+        Number(d.unitCostUsd),
+        Number(d.quantity),
+      );
     }
 
     ventasMesUsd = roundCurrency(ventasMesUsd, BASE_CURRENCY);
     utilidadMesUsd = roundCurrency(utilidadMesUsd, BASE_CURRENCY);
+    const ventasDiaUsd = roundCurrency(Number(dayPayments._sum.amountUsd ?? 0), BASE_CURRENCY);
 
     return {
       kpis: {
+        ventasDiaUsd,
+        ventasDiaTransacciones: dayPayments._count,
         ventasMesUsd,
         ventasMesVes: roundCurrency(ventasMesVes, TRANSACTION_CURRENCY),
         margenUtilidadPromedio: calculateMarginPercent(ventasMesUsd, utilidadMesUsd),
@@ -108,11 +127,12 @@ export class ReportsService {
   }
 
   private async countLowStock(): Promise<number> {
-    const products = await this.prisma.product.findMany({
-      where: { isActive: true },
-      select: { stock: true, minStock: true },
-    });
-    return products.filter((p) => Number(p.stock) <= Number(p.minStock)).length;
+    const rows = await this.prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(*)::bigint AS count
+      FROM products
+      WHERE is_active = true AND stock <= min_stock
+    `;
+    return Number(rows[0]?.count ?? 0);
   }
 
   async getVentasDiarias(days = 30) {
@@ -545,12 +565,33 @@ export class ReportsService {
     };
   }
 
+  private formatCustomerName(
+    customer: {
+      firstName: string | null;
+      lastName: string | null;
+      businessName: string | null;
+    } | null | undefined,
+  ): string {
+    if (!customer) return '—';
+    const person = [customer.firstName, customer.lastName].filter(Boolean).join(' ').trim();
+    if (person) return person;
+    return customer.businessName ?? '—';
+  }
+
   parseDateRange(fromStr?: string, toStr?: string) {
+    const MAX_EXPORT_DAYS = 366;
     const to = toStr ? new Date(toStr) : new Date();
     const from = fromStr ? new Date(fromStr) : new Date(to);
     if (!fromStr) from.setDate(from.getDate() - 30);
     from.setHours(0, 0, 0, 0);
     to.setHours(23, 59, 59, 999);
+    const days = Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
+    if (days > MAX_EXPORT_DAYS) {
+      const capped = new Date(to);
+      capped.setDate(capped.getDate() - MAX_EXPORT_DAYS);
+      capped.setHours(0, 0, 0, 0);
+      return { from: capped, to };
+    }
     return { from, to };
   }
 
@@ -608,10 +649,7 @@ export class ReportsService {
       const inv = p.invoice;
       if (!inv) continue;
 
-      const cliente =
-        inv.customer?.businessName ||
-        [inv.customer?.firstName, inv.customer?.lastName].filter(Boolean).join(' ') ||
-        '—';
+      const cliente = this.formatCustomerName(inv.customer);
 
       const montoOriginal = Number(p.amount);
       const montoUsd = Number(p.amountUsd);
@@ -744,16 +782,15 @@ export class ReportsService {
   async exportClientes() {
     const customers = await this.prisma.customer.findMany({
       where: { isActive: true },
-      orderBy: { businessName: 'asc' },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     });
 
     return {
       rows: customers.map((c) => ({
         rif: c.rif ?? '',
-        nombre:
-          c.businessName ||
-          [c.firstName, c.lastName].filter(Boolean).join(' ') ||
-          '',
+        nombre: c.firstName ?? '',
+        apellido: c.lastName ?? '',
+        nombreCompleto: this.formatCustomerName(c),
         telefono: c.phone,
         email: c.email ?? '',
         limiteCreditoUsd: Number(c.creditLimitUsd),
@@ -837,6 +874,7 @@ export class ReportsService {
         nombre: m.name,
         tipo: m.type,
         moneda: m.currency,
+        saldoDisponible: Number(m.balance),
       })),
     };
   }

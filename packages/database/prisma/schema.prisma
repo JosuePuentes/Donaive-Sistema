@@ -347,6 +347,7 @@ model Product {
 
   @@index([name])
   @@index([barcode])
+  @@index([categoryId])
   @@index([isActive, stock])
   @@map("products")
 }
@@ -485,6 +486,8 @@ model PurchaseDetail {
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
 
+  @@index([purchaseId])
+  @@index([productId])
   @@map("purchase_details")
 }
 
@@ -556,6 +559,8 @@ model Invoice {
   @@index([createdAt(sort: Desc)])
   @@index([customerId])
   @@index([documentType, status])
+  @@index([status, documentType, confirmedAt(sort: Desc)])
+  @@index([cashRegisterSessionId])
   @@index([isOnHold])
   @@map("invoices")
 }
@@ -577,6 +582,8 @@ model InvoiceDetail {
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
 
+  @@index([invoiceId])
+  @@index([productId])
   @@map("invoice_details")
 }
 
@@ -613,6 +620,7 @@ model BankAccount {
   documentPayments DocumentPayment[]
   cashRegisterSessions CashRegisterSession[]
   supplierPayments   SupplierPayment[]
+  paymentMethods     PaymentMethod[]
 
   @@unique([bankId, accountNumber])
   @@map("bank_accounts")
@@ -625,11 +633,13 @@ model PaymentMethod {
   type        PaymentMethodType
   currency    CurrencyCode
   bankAccountId String?         @map("bank_account_id")
+  balance     Decimal           @default(0) @db.Decimal(18, 4)
   isActive    Boolean           @default(true) @map("is_active")
   sortOrder   Int               @default(0) @map("sort_order")
   createdAt   DateTime          @default(now()) @map("created_at")
   updatedAt   DateTime          @updatedAt @map("updated_at")
 
+  bankAccount      BankAccount?      @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
   documentPayments DocumentPayment[]
   cashCountLines   CashRegisterCountLine[]
   supplierPayments SupplierPayment[]
@@ -709,6 +719,8 @@ model DocumentPayment {
   invoice       Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@index([paidAt(sort: Desc)])
+  @@index([invoiceId])
+  @@index([purchaseId])
   @@map("document_payments")
 }
 
@@ -778,6 +790,7 @@ model AccountPayable {
   supplierPayments SupplierPayment[]
 
   @@index([status, dueDate])
+  @@index([supplierId, status])
   @@map("accounts_payable")
 }
 

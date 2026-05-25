@@ -12,7 +12,7 @@ export class ListProductsQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(2000)
+  @Max(100)
   limit?: number = 20;
 
   @IsOptional()

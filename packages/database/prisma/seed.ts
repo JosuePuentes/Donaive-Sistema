@@ -244,29 +244,35 @@ async function main() {
     create: { code: 'BNC', name: 'Banco Nacional de Crédito', scope: 'NATIONAL' },
   });
 
-  const cashAccount = await prisma.bankAccount.upsert({
-    where: { bankId_accountNumber: { bankId: bank.id, accountNumber: 'CAJA-001' } },
-    update: {},
-    create: {
-      bankId: bank.id,
-      accountNumber: 'CAJA-001',
-      accountName: 'Caja Principal',
-      accountType: 'CASH_REGISTER',
-      currency: 'USD',
-    },
-  });
+  const accountDefs = [
+    { accountNumber: 'EF-USD', accountName: 'Efectivo USD', accountType: 'CASH_REGISTER' as const, currency: 'USD' as const },
+    { accountNumber: 'EF-VES', accountName: 'Efectivo Bs', accountType: 'CASH_REGISTER' as const, currency: 'VES' as const },
+    { accountNumber: 'PM-VES', accountName: 'Pago Móvil', accountType: 'MOBILE_PAYMENT' as const, currency: 'VES' as const },
+    { accountNumber: 'ZELLE-USD', accountName: 'Zelle', accountType: 'ZELLE' as const, currency: 'USD' as const },
+    { accountNumber: 'TRF-USD', accountName: 'Transferencia USD', accountType: 'CHECKING' as const, currency: 'USD' as const },
+  ];
+
+  const accountsByNumber = new Map<string, string>();
+  for (const def of accountDefs) {
+    const acc = await prisma.bankAccount.upsert({
+      where: { bankId_accountNumber: { bankId: bank.id, accountNumber: def.accountNumber } },
+      update: {},
+      create: { bankId: bank.id, ...def },
+    });
+    accountsByNumber.set(def.accountNumber, acc.id);
+  }
 
   const paymentMethods = [
-    { code: 'CASH_USD', name: 'Efectivo USD', type: 'CASH_USD' as const, currency: 'USD' as const, sortOrder: 1 },
-    { code: 'CASH_VES', name: 'Efectivo Bs', type: 'CASH_VES' as const, currency: 'VES' as const, sortOrder: 2 },
-    { code: 'MOBILE', name: 'Pago Móvil', type: 'MOBILE_PAYMENT' as const, currency: 'VES' as const, sortOrder: 3 },
-    { code: 'ZELLE', name: 'Zelle', type: 'ZELLE' as const, currency: 'USD' as const, sortOrder: 4 },
+    { code: 'CASH_USD', name: 'Efectivo USD', type: 'CASH_USD' as const, currency: 'USD' as const, bankAccountId: accountsByNumber.get('EF-USD')!, sortOrder: 1 },
+    { code: 'CASH_VES', name: 'Efectivo Bs', type: 'CASH_VES' as const, currency: 'VES' as const, bankAccountId: accountsByNumber.get('EF-VES')!, sortOrder: 2 },
+    { code: 'MOBILE', name: 'Pago Móvil', type: 'MOBILE_PAYMENT' as const, currency: 'VES' as const, bankAccountId: accountsByNumber.get('PM-VES')!, sortOrder: 3 },
+    { code: 'ZELLE', name: 'Zelle', type: 'ZELLE' as const, currency: 'USD' as const, bankAccountId: accountsByNumber.get('ZELLE-USD')!, sortOrder: 4 },
     {
       code: 'TRANSFER_USD',
       name: 'Transferencia / Caja Admin',
       type: 'BANK_TRANSFER' as const,
       currency: 'USD' as const,
-      bankAccountId: cashAccount.id,
+      bankAccountId: accountsByNumber.get('TRF-USD')!,
       sortOrder: 5,
     },
   ];
@@ -274,7 +280,7 @@ async function main() {
   for (const pm of paymentMethods) {
     await prisma.paymentMethod.upsert({
       where: { code: pm.code },
-      update: { bankAccountId: 'bankAccountId' in pm ? pm.bankAccountId : undefined },
+      update: { bankAccountId: pm.bankAccountId },
       create: pm,
     });
   }

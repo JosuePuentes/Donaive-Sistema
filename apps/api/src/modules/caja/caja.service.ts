@@ -28,8 +28,12 @@ export interface EstadoCajaActual {
     openingBalanceVes: number;
   };
   resumenVentas: {
+    /** Total cobrado en USD (incluye Bs convertidos a BCV por pago) */
+    totalCobradoUsd: number;
+    totalFacturadoUsd: number;
     totalVentasUsd: number;
     totalVentasVes: number;
+    totalBsRecibidos: number;
     cantidadVentas: number;
   };
   arqueoEsperado: ArqueoLineaEstado[];
@@ -295,20 +299,42 @@ export class CajaService {
   }
 
   private async calcularResumenVentas(sessionId: string) {
-    const invoices = await this.prisma.invoice.findMany({
-      where: { cashRegisterSessionId: sessionId, status: 'CONFIRMED' },
-      select: { totalUsd: true, totalVes: true },
-    });
+    const [invoices, payments] = await Promise.all([
+      this.prisma.invoice.findMany({
+        where: { cashRegisterSessionId: sessionId, status: 'CONFIRMED' },
+        select: { totalUsd: true, totalVes: true },
+      }),
+      this.prisma.documentPayment.findMany({
+        where: {
+          invoice: { cashRegisterSessionId: sessionId, status: 'CONFIRMED' },
+        },
+        select: { amountUsd: true, amount: true, currency: true },
+      }),
+    ]);
+
+    let totalCobradoUsd = 0;
+    let totalBsRecibidos = 0;
+    for (const p of payments) {
+      totalCobradoUsd += Number(p.amountUsd);
+      if (p.currency === 'VES' && Number(p.amount) > 0) {
+        totalBsRecibidos += Number(p.amount);
+      }
+    }
+
+    const totalFacturadoUsd = roundCurrency(
+      invoices.reduce((s, i) => s + Number(i.totalUsd), 0),
+      BASE_CURRENCY,
+    );
 
     return {
-      totalVentasUsd: roundCurrency(
-        invoices.reduce((s, i) => s + Number(i.totalUsd), 0),
-        BASE_CURRENCY,
-      ),
+      totalCobradoUsd: roundCurrency(totalCobradoUsd, BASE_CURRENCY),
+      totalFacturadoUsd,
+      totalVentasUsd: roundCurrency(totalCobradoUsd, BASE_CURRENCY),
       totalVentasVes: roundCurrency(
         invoices.reduce((s, i) => s + Number(i.totalVes), 0),
         TRANSACTION_CURRENCY,
       ),
+      totalBsRecibidos: roundCurrency(totalBsRecibidos, TRANSACTION_CURRENCY),
       cantidadVentas: invoices.length,
     };
   }

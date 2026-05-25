@@ -43,14 +43,15 @@ export function PosShell({
             <div className="h-8 w-px bg-slate-200" />
             <div className="text-right">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                Ventas del turno
+                Ventas del turno (USD)
               </p>
               <p className="font-semibold tabular-nums text-slate-900">
-                {estado.resumenVentas.cantidadVentas} ·{' '}
-                {formatCurrency(estado.resumenVentas.totalVentasUsd)}
+                {estado.resumenVentas.cantidadVentas} ventas ·{' '}
+                {formatCurrency(estado.resumenVentas.totalCobradoUsd ?? estado.resumenVentas.totalVentasUsd)}
               </p>
               <p className="text-xs text-slate-500 tabular-nums">
-                {formatCurrency(estado.resumenVentas.totalVentasVes, 'VES')}
+                Bs recibidos: {formatCurrency(estado.resumenVentas.totalBsRecibidos ?? 0, 'VES')}
+                {' · '}Incluye pagos en Bs a tasa BCV del momento
               </p>
             </div>
           </div>

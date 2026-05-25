@@ -39,7 +39,7 @@ export class ListMovementsQueryDto {
   @IsOptional()
   @Type(() => Number)
   @Min(1)
-  @Max(2000)
+  @Max(100)
   limit?: number = 50;
 }
 

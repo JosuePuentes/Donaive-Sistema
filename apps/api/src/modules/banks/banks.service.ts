@@ -21,11 +21,15 @@ export class BanksService {
     return this.prisma.bank.create({ data: dto });
   }
 
-  findAllAccounts() {
-    return this.prisma.bankAccount.findMany({
+  async findAllAccounts() {
+    const accounts = await this.prisma.bankAccount.findMany({
       where: { isActive: true },
       include: { bank: { select: { id: true, code: true, name: true } } },
     });
+    return accounts.map((a) => ({
+      ...a,
+      balance: Number(a.balance),
+    }));
   }
 
   async createAccount(dto: CreateBankAccountDto) {
@@ -43,11 +47,20 @@ export class BanksService {
     });
   }
 
-  findAllPaymentMethods() {
-    return this.prisma.paymentMethod.findMany({
+  async findAllPaymentMethods() {
+    const methods = await this.prisma.paymentMethod.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: 'asc' },
+      include: {
+        bankAccount: {
+          select: { id: true, accountNumber: true, accountName: true, currency: true },
+        },
+      },
     });
+    return methods.map((m) => ({
+      ...m,
+      balance: Number(m.balance),
+    }));
   }
 
   async createPaymentMethod(dto: CreatePaymentMethodDto) {

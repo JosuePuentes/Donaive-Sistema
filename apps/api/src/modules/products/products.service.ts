@@ -29,7 +29,7 @@ export class ProductsService {
 
   async findAll(query: ListProductsQueryDto) {
     const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
+    const limit = Math.min(query.limit ?? 20, 100);
     const skip = (page - 1) * limit;
 
     const where: Prisma.ProductWhereInput = {};
@@ -52,7 +52,7 @@ export class ProductsService {
     }
 
     if (query.lowStock) {
-      where.isActive = true;
+      return this.findLowStockPaginated({ page, limit, search: query.search });
     }
 
     const [products, total] = await Promise.all([
@@ -66,21 +66,89 @@ export class ProductsService {
       this.prisma.product.count({ where }),
     ]);
 
-    let data = await this.dualCurrency.enrichProducts(
+    const data = await this.dualCurrency.enrichProducts(
       products.map((p) => this.mapProduct(p)),
     );
-
-    if (query.lowStock) {
-      data = data.filter((p) => p.isBelowMinStock);
-    }
 
     return {
       data,
       meta: {
-        total: query.lowStock ? data.length : total,
+        total,
         page,
         limit,
-        totalPages: Math.ceil((query.lowStock ? data.length : total) / limit),
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
+  }
+
+  private async findLowStockPaginated(opts: {
+    page: number;
+    limit: number;
+    search?: string;
+  }) {
+    const { page, limit, search } = opts;
+    const skip = (page - 1) * limit;
+    const searchPattern = search ? `%${search}%` : null;
+
+    const [countRows, idRows] = await Promise.all([
+      searchPattern
+        ? this.prisma.$queryRaw<[{ count: bigint }]>`
+            SELECT COUNT(*)::bigint AS count FROM products
+            WHERE is_active = true AND stock <= min_stock
+              AND (name ILIKE ${searchPattern} OR sku ILIKE ${searchPattern}
+                OR COALESCE(barcode, '') ILIKE ${searchPattern}
+                OR COALESCE(brand, '') ILIKE ${searchPattern})
+          `
+        : this.prisma.$queryRaw<[{ count: bigint }]>`
+            SELECT COUNT(*)::bigint AS count FROM products
+            WHERE is_active = true AND stock <= min_stock
+          `,
+      searchPattern
+        ? this.prisma.$queryRaw<{ id: string }[]>`
+            SELECT id FROM products
+            WHERE is_active = true AND stock <= min_stock
+              AND (name ILIKE ${searchPattern} OR sku ILIKE ${searchPattern}
+                OR COALESCE(barcode, '') ILIKE ${searchPattern}
+                OR COALESCE(brand, '') ILIKE ${searchPattern})
+            ORDER BY name ASC
+            LIMIT ${limit} OFFSET ${skip}
+          `
+        : this.prisma.$queryRaw<{ id: string }[]>`
+            SELECT id FROM products
+            WHERE is_active = true AND stock <= min_stock
+            ORDER BY name ASC
+            LIMIT ${limit} OFFSET ${skip}
+          `,
+    ]);
+
+    const total = Number(countRows[0]?.count ?? 0);
+    const ids = idRows.map((r) => r.id);
+
+    if (ids.length === 0) {
+      return {
+        data: [],
+        meta: { total, page, limit, totalPages: Math.ceil(total / limit) || 1 },
+      };
+    }
+
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: ids } },
+      include: { category: { select: { id: true, name: true } } },
+    });
+    const order = new Map(ids.map((id, i) => [id, i]));
+    products.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+
+    const data = await this.dualCurrency.enrichProducts(
+      products.map((p) => this.mapProduct(p)),
+    );
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
       },
     };
   }
@@ -265,26 +333,31 @@ export class ProductsService {
       rows.map((r) => ({ ...r, sku: normalizeImportSku(r.sku) })).filter((r) => r.sku),
     );
 
-    const preview = await Promise.all(
-      merged.map(async (row) => {
-        const existing = await this.prisma.product.findUnique({ where: { sku: row.sku } });
-        const stockToAdd = row.stock ?? 0;
-        const currentStock = existing ? Number(existing.stock) : 0;
+    const skus = merged.map((r) => r.sku);
+    const existingList = await this.prisma.product.findMany({
+      where: { sku: { in: skus } },
+      select: { sku: true, name: true, stock: true },
+    });
+    const existingBySku = new Map(existingList.map((p) => [p.sku, p]));
 
-        return {
-          sku: row.sku,
-          name: row.name,
-          brand: row.brand ?? '',
-          costUsd: row.costUsd,
-          marginPercent: row.marginPercent,
-          stockToAdd,
-          action: existing ? ('UPDATE' as const) : ('CREATE' as const),
-          currentName: existing?.name ?? null,
-          currentStock,
-          stockAfter: existing ? currentStock + stockToAdd : stockToAdd,
-        };
-      }),
-    );
+    const preview = merged.map((row) => {
+      const existing = existingBySku.get(row.sku);
+      const stockToAdd = row.stock ?? 0;
+      const currentStock = existing ? Number(existing.stock) : 0;
+
+      return {
+        sku: row.sku,
+        name: row.name,
+        brand: row.brand ?? '',
+        costUsd: row.costUsd,
+        marginPercent: row.marginPercent,
+        stockToAdd,
+        action: existing ? ('UPDATE' as const) : ('CREATE' as const),
+        currentName: existing?.name ?? null,
+        currentStock,
+        stockAfter: existing ? currentStock + stockToAdd : stockToAdd,
+      };
+    });
 
     return {
       originalRows: rows.length,
@@ -300,10 +373,15 @@ export class ProductsService {
       rows.map((r) => ({ ...r, sku: normalizeImportSku(r.sku) })).filter((r) => r.sku),
     );
     const results: Array<{ sku: string; ok: boolean; error?: string }> = [];
+    const allSkus = merged.map((r) => r.sku);
+    const existingProducts = await this.prisma.product.findMany({
+      where: { sku: { in: allSkus } },
+    });
+    const existingBySku = new Map(existingProducts.map((p) => [p.sku, p]));
 
     for (const row of merged) {
       try {
-        const existing = await this.prisma.product.findUnique({ where: { sku: row.sku } });
+        const existing = existingBySku.get(row.sku);
         if (existing) {
           const costUsd = row.costUsd;
           const marginPercent = row.marginPercent;

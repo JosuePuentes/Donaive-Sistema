@@ -5,7 +5,7 @@ import { computeCxpAbonoApplied } from '@flp/shared';
 import { banksApi, cxpApi } from '@/lib/purchases-api';
 import { pricingApi } from '@/lib/purchases-api';
 import { formatCurrency } from '@/lib/format-currency';
-import type { BankAccount, CxpPendiente } from '@/types/purchases';
+import type { CxpPendiente, PaymentMethodTreasury } from '@/types/purchases';
 
 interface CxpPaymentModalProps {
   open: boolean;
@@ -15,8 +15,8 @@ interface CxpPaymentModalProps {
 }
 
 export function CxpPaymentModal({ open, items, onClose, onSuccess }: CxpPaymentModalProps) {
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
-  const [bankAccountId, setBankAccountId] = useState('');
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodTreasury[]>([]);
+  const [paymentMethodId, setPaymentMethodId] = useState('');
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [tasaAbono, setTasaAbono] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -26,18 +26,19 @@ export function CxpPaymentModal({ open, items, onClose, onSuccess }: CxpPaymentM
     if (!open) return;
     setAmounts({});
     setError('');
-    Promise.all([banksApi.accounts(), pricingApi.currentRate()])
-      .then(([accounts, rate]) => {
-        const active = accounts.filter((a) => a.isActive);
-        setBankAccounts(active);
-        if (active.length > 0) setBankAccountId(active[0].id);
+    Promise.all([banksApi.paymentMethods(), pricingApi.currentRate()])
+      .then(([methods, rate]) => {
+        const active = methods.filter((m) => m.bankAccountId);
+        setPaymentMethods(active);
+        if (active.length > 0) setPaymentMethodId(active[0].id);
         setTasaAbono(rate.tasaBcvMomento);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Error al cargar datos de pago'));
+      .catch((err) => setError(err instanceof Error ? err.message : 'Error al cargar métodos de pago'));
   }, [open]);
 
-  const selectedAccount = bankAccounts.find((a) => a.id === bankAccountId);
-  const paymentCurrency = (selectedAccount?.currency ?? 'USD') as 'USD' | 'VES';
+  const selectedMethod = paymentMethods.find((m) => m.id === paymentMethodId);
+  const paymentCurrency = (selectedMethod?.currency ?? 'USD') as 'USD' | 'VES';
+  const saldoDisponible = selectedMethod ? Number(selectedMethod.balance) : 0;
 
   const lineas = useMemo(() => {
     return items
@@ -52,6 +53,11 @@ export function CxpPaymentModal({ open, items, onClose, onSuccess }: CxpPaymentM
       })
       .filter(Boolean) as Array<{ accountPayableId: string; amount: number; currency: 'USD' | 'VES' }>;
   }, [amounts, items, paymentCurrency]);
+
+  const totalAbono = useMemo(
+    () => lineas.reduce((s, l) => s + l.amount, 0),
+    [lineas],
+  );
 
   const preview = useMemo(() => {
     if (tasaAbono <= 0) return [];
@@ -90,14 +96,20 @@ export function CxpPaymentModal({ open, items, onClose, onSuccess }: CxpPaymentM
       setError('Indique al menos un monto de abono');
       return;
     }
-    if (!bankAccountId) {
-      setError('Seleccione cuenta de salida');
+    if (!paymentMethodId) {
+      setError('Seleccione el método de pago');
+      return;
+    }
+    if (totalAbono > saldoDisponible + 0.0001) {
+      setError(
+        `Saldo insuficiente en ${selectedMethod?.name}. Disponible: ${formatCurrency(saldoDisponible, paymentCurrency)}`,
+      );
       return;
     }
 
     setLoading(true);
     try {
-      await cxpApi.abonar({ bankAccountId, lineas });
+      await cxpApi.abonar({ paymentMethodId, lineas });
       onSuccess();
       onClose();
     } catch (err) {
@@ -123,21 +135,25 @@ export function CxpPaymentModal({ open, items, onClose, onSuccess }: CxpPaymentM
 
         <div className="p-6 space-y-4">
           <div>
-            <label className="text-sm font-medium">Cuenta bancaria / caja de salida *</label>
+            <label className="text-sm font-medium">Método de pago *</label>
             <select
-              value={bankAccountId}
-              onChange={(e) => setBankAccountId(e.target.value)}
+              value={paymentMethodId}
+              onChange={(e) => setPaymentMethodId(e.target.value)}
               className="w-full mt-1 px-3 py-2 border border-[var(--border)] rounded-lg bg-[var(--muted)]"
             >
-              {bankAccounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.accountName} ({a.accountNumber}) — {a.currency}
+              {paymentMethods.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} — disponible {formatCurrency(Number(m.balance), m.currency as 'USD' | 'VES')}
                 </option>
               ))}
             </select>
-            <p className="text-xs text-zinc-500 mt-1">
-              Los abonos se registran en {paymentCurrency}. Si paga en Bs, la amortización al saldo USD usa la tasa del día.
-            </p>
+            {selectedMethod ? (
+              <p className="text-xs text-zinc-500 mt-1">
+                Cuenta: {selectedMethod.bankAccount?.accountName ?? '—'} · Los abonos se registran en{' '}
+                {paymentCurrency}. Saldo después del abono:{' '}
+                {formatCurrency(Math.max(0, saldoDisponible - totalAbono), paymentCurrency)}
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-3">
@@ -153,7 +169,7 @@ export function CxpPaymentModal({ open, items, onClose, onSuccess }: CxpPaymentM
                 <div className="flex gap-2">
                   <input
                     type="number"
-                    step="0.01"
+                    step={paymentCurrency === 'USD' ? '0.0001' : '0.01'}
                     min="0"
                     placeholder={`Monto ${paymentCurrency}`}
                     value={amounts[item.id] ?? ''}

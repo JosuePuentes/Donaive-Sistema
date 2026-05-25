@@ -22,7 +22,7 @@ export class CustomersService {
             }
           : {}),
       },
-      orderBy: { businessName: 'asc' },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
       take: 50,
     });
   }

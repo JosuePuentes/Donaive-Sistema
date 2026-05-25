@@ -13,6 +13,7 @@ import {
   vesToUsd,
   roundCurrency,
   BASE_CURRENCY,
+  TRANSACTION_CURRENCY,
   type CurrencyCode,
 } from '@flp/shared';
 
@@ -26,14 +27,80 @@ export class SalesService {
     private readonly treasuryService: TreasuryService,
   ) {}
 
+  async getVentasResumen() {
+    const now = new Date();
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const invoiceFilter = {
+      status: 'CONFIRMED' as const,
+      documentType: { in: ['INVOICE', 'POS_SALE'] as const },
+    };
+
+    const [diaPagos, mesPagos, mesFacturas] = await Promise.all([
+      this.prisma.documentPayment.aggregate({
+        where: { invoice: { ...invoiceFilter, confirmedAt: { gte: startOfDay } } },
+        _sum: { amountUsd: true },
+        _count: true,
+      }),
+      this.prisma.documentPayment.aggregate({
+        where: { invoice: { ...invoiceFilter, confirmedAt: { gte: startOfMonth } } },
+        _sum: { amountUsd: true },
+        _count: true,
+      }),
+      this.prisma.invoice.aggregate({
+        where: { ...invoiceFilter, confirmedAt: { gte: startOfMonth } },
+        _sum: { totalUsd: true, totalVes: true },
+        _count: true,
+      }),
+    ]);
+
+    return {
+      ventasDiaUsd: roundCurrency(Number(diaPagos._sum.amountUsd ?? 0), BASE_CURRENCY),
+      ventasDiaTransacciones: diaPagos._count,
+      ventasMesCobradoUsd: roundCurrency(Number(mesPagos._sum.amountUsd ?? 0), BASE_CURRENCY),
+      ventasMesFacturadoUsd: roundCurrency(Number(mesFacturas._sum.totalUsd ?? 0), BASE_CURRENCY),
+      ventasMesVes: roundCurrency(Number(mesFacturas._sum.totalVes ?? 0), TRANSACTION_CURRENCY),
+      ventasMesTransacciones: mesFacturas._count,
+      tasaBcvActual: await this.transactionFreeze.getTasaBcvMomento(),
+    };
+  }
+
   findRecentSales() {
     return this.prisma.invoice.findMany({
       where: { documentType: { in: ['INVOICE', 'POS_SALE'] }, status: 'CONFIRMED' },
-      include: {
+      select: {
+        id: true,
+        number: true,
+        documentType: true,
+        status: true,
+        totalUsd: true,
+        totalVes: true,
+        confirmedAt: true,
+        createdAt: true,
         customer: { select: { id: true, firstName: true, lastName: true, businessName: true } },
-        details: { include: { product: { select: { sku: true, name: true } } } },
         cashRegisterSession: { select: { sessionNumber: true } },
-        payments: { include: { paymentMethod: { select: { code: true, name: true } } } },
+        tasaBcvMomento: true,
+        payments: {
+          select: {
+            id: true,
+            amount: true,
+            amountUsd: true,
+            currency: true,
+            reference: true,
+            paymentMethod: { select: { code: true, name: true } },
+          },
+        },
+        details: {
+          take: 8,
+          select: {
+            id: true,
+            quantity: true,
+            totalUsd: true,
+            product: { select: { name: true, barcode: true, brand: true } },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
       take: 50,
@@ -187,7 +254,12 @@ export class SalesService {
           },
         });
 
-        await this.treasuryService.applyMovement(tx, method.bankAccountId, payment.amount);
+        await this.treasuryService.recordMovement(
+          tx,
+          payment.paymentMethodId,
+          payment.amount,
+          method,
+        );
       }
 
       if (dto.change && dto.change.amount > 0) {
@@ -211,7 +283,12 @@ export class SalesService {
           },
         });
 
-        await this.treasuryService.applyMovement(tx, changeMethod.bankAccountId, -dto.change.amount);
+        await this.treasuryService.recordMovement(
+          tx,
+          dto.change.paymentMethodId,
+          -dto.change.amount,
+          changeMethod,
+        );
       }
 
       const fullInvoice = await tx.invoice.findUniqueOrThrow({

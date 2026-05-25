@@ -24,11 +24,7 @@ export class CxpAbonoLineDto {
 
 export class CxpAbonoDto {
   @IsString()
-  bankAccountId!: string;
-
-  @IsOptional()
-  @IsString()
-  paymentMethodId?: string;
+  paymentMethodId!: string;
 
   @IsArray()
   @ArrayMinSize(1)

@@ -138,7 +138,7 @@ export function validatePosPayments(
       return { valid: false, message: 'Debe indicar el vuelto a entregar' };
     }
     const changeUsd = convertPaymentToUsd(change.amount, change.currency, tasaBcv);
-    if (Math.abs(changeUsd - summary.overpaymentUsd) > 0.01) {
+    if (Math.abs(changeUsd - summary.overpaymentUsd) > PAYMENT_TOLERANCE_USD) {
       return {
         valid: false,
         message: `El vuelto (${changeUsd.toFixed(2)} USD) no coincide con el sobrepago (${summary.overpaymentUsd.toFixed(2)} USD)`,

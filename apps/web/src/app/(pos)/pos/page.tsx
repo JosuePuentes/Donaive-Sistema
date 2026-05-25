@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Minus,
   Package,
@@ -24,11 +24,12 @@ import { PosShell } from '@/components/pos/pos-shell';
 import { Button } from '@/components/ui/button';
 import { MoneyDisplay } from '@/components/ui/money-display';
 import { cn } from '@/lib/cn';
-import type { PosChangeInput, PosPaymentInput } from '@flp/shared';
+import { roundCurrency, BASE_CURRENCY, type PosChangeInput, type PosPaymentInput } from '@flp/shared';
 import type { Product } from '@/types/inventory';
 import type { PosSaleReceipt } from '@/types/pos-receipt';
 import { PosReceiptPrint } from '@/components/print/pos-receipt-print';
 import { PosCustomerPanel, type PosCustomer } from '@/components/pos/pos-customer-panel';
+import { PosProductLabel } from '@/components/pos/pos-product-label';
 
 interface PaymentMethod extends PosPaymentMethod {}
 
@@ -50,6 +51,7 @@ export default function PosPage() {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [search, setSearch] = useState('');
+  const [searchDebounced, setSearchDebounced] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [lastSale, setLastSale] = useState<PosSaleReceipt | null>(null);
@@ -89,18 +91,25 @@ export default function PosPage() {
   }, []);
 
   useEffect(() => {
-    if (!estadoCaja) return;
-    productsApi.list({ limit: 100, isActive: true }).then((r) => setProducts(r.data));
-    apiFetch<PaymentMethod[]>('/payment-methods').then(setPaymentMethods).catch(() => {});
-  }, [estadoCaja]);
+    const t = setTimeout(() => setSearchDebounced(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const filtered = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.sku.toLowerCase().includes(search.toLowerCase()) ||
-      (p.barcode ?? '').includes(search) ||
-      (p.brand ?? '').toLowerCase().includes(search.toLowerCase()),
-  );
+  useEffect(() => {
+    if (!estadoCaja) return;
+    const q = searchDebounced.trim();
+    productsApi
+      .list({
+        limit: 48,
+        isActive: true,
+        ...(q ? { search: q } : {}),
+      })
+      .then((r) => setProducts(r.data))
+      .catch(() => setProducts([]));
+    apiFetch<PaymentMethod[]>('/payment-methods').then(setPaymentMethods).catch(() => {});
+  }, [estadoCaja, searchDebounced]);
+
+  const filtered = useMemo(() => products, [products]);
 
   function addToCart(product: Product) {
     setCart((prev) => {
@@ -118,9 +127,26 @@ export default function PosPage() {
     setCart((prev) =>
       prev
         .map((l) =>
-          l.product.id === productId ? { ...l, quantity: l.quantity + delta } : l,
+          l.product.id === productId
+            ? { ...l, quantity: Math.max(0.001, roundCurrency(l.quantity + delta, BASE_CURRENCY)) }
+            : l,
         )
-        .filter((l) => l.quantity > 0),
+        .filter((l) => l.quantity >= 0.001),
+    );
+  }
+
+  function setQty(productId: string, raw: string) {
+    const qty = parseFloat(raw);
+    if (!raw || Number.isNaN(qty) || qty < 0.001) {
+      setCart((prev) => prev.filter((l) => l.product.id !== productId));
+      return;
+    }
+    setCart((prev) =>
+      prev.map((l) =>
+        l.product.id === productId
+          ? { ...l, quantity: roundCurrency(qty, BASE_CURRENCY) }
+          : l,
+      ),
     );
   }
 
@@ -128,11 +154,21 @@ export default function PosPage() {
     setCart((prev) => prev.filter((l) => l.product.id !== productId));
   }
 
-  const totalUsd = cart.reduce((s, l) => s + l.product.salePriceUsd * l.quantity, 0);
   const tasa = cart[0]?.product.tasaBcvActual ?? products[0]?.tasaBcvActual ?? 0;
-  const totalVes = cart.reduce(
-    (s, l) => s + (l.product.salePriceVes ?? l.product.salePriceUsd * tasa) * l.quantity,
-    0,
+  const totalUsd = roundCurrency(
+    cart.reduce(
+      (s, l) =>
+        s + roundCurrency(l.product.salePriceUsd * l.quantity, BASE_CURRENCY),
+      0,
+    ),
+    BASE_CURRENCY,
+  );
+  const totalVes = roundCurrency(
+    cart.reduce((s, l) => {
+      const unitVes = l.product.salePriceVes ?? l.product.salePriceUsd * tasa;
+      return s + roundCurrency(unitVes * l.quantity, 'VES');
+    }, 0),
+    'VES',
   );
 
   async function checkout(payload: { payments: PosPaymentInput[]; change?: PosChangeInput }) {
@@ -251,12 +287,16 @@ export default function PosPage() {
                 <p className="text-lg font-bold text-slate-900 mt-1">
                   {estadoCaja.resumenVentas.cantidadVentas} transacciones
                 </p>
-                <MoneyDisplay
-                  usd={estadoCaja.resumenVentas.totalVentasUsd}
-                  ves={estadoCaja.resumenVentas.totalVentasVes}
-                  size="md"
-                  className="mt-2"
-                />
+                <p className="text-2xl font-bold text-indigo-700 tabular-nums mt-2">
+                  {formatCurrency(
+                    estadoCaja.resumenVentas.totalCobradoUsd ?? estadoCaja.resumenVentas.totalVentasUsd,
+                  )}{' '}
+                  <span className="text-sm font-medium text-slate-500">USD cobrado</span>
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Incluye Bs recibidos convertidos a BCV · Bs físicos:{' '}
+                  {formatCurrency(estadoCaja.resumenVentas.totalBsRecibidos ?? 0, 'VES')}
+                </p>
                 <p className="text-xs text-slate-500 mt-2">
                   Fondo inicial: {formatCurrency(estadoCaja.session.openingBalanceUsd)} +{' '}
                   {formatCurrency(estadoCaja.session.openingBalanceVes, 'VES')}
@@ -320,9 +360,9 @@ export default function PosPage() {
             ) : (
               <ul className="space-y-1">
                 {cart.map((l) => {
-                  const lineUsd = l.product.salePriceUsd * l.quantity;
-                  const lineVes =
-                    (l.product.salePriceVes ?? l.product.salePriceUsd * tasa) * l.quantity;
+                  const lineUsd = roundCurrency(l.product.salePriceUsd * l.quantity, BASE_CURRENCY);
+                  const unitVes = l.product.salePriceVes ?? l.product.salePriceUsd * tasa;
+                  const lineVes = roundCurrency(unitVes * l.quantity, 'VES');
                   return (
                     <li
                       key={l.product.id}
@@ -332,13 +372,7 @@ export default function PosPage() {
                         <Package className="h-5 w-5" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm text-slate-900 truncate leading-snug">
-                          {l.product.name}
-                        </p>
-                        <p className="text-xs text-slate-400 font-mono">
-                          {l.product.sku}
-                          {l.product.brand ? ` · ${l.product.brand}` : ''}
-                        </p>
+                        <PosProductLabel product={l.product} compact />
                         <div className="flex items-center gap-1.5 mt-2">
                           <button
                             type="button"
@@ -347,9 +381,14 @@ export default function PosPage() {
                           >
                             <Minus className="h-3.5 w-3.5" />
                           </button>
-                          <span className="w-8 text-center text-sm font-semibold tabular-nums">
-                            {l.quantity}
-                          </span>
+                          <input
+                            type="number"
+                            min="0.001"
+                            step="0.001"
+                            value={l.quantity}
+                            onChange={(e) => setQty(l.product.id, e.target.value)}
+                            className="w-16 text-center text-sm font-semibold tabular-nums border border-slate-200 rounded-lg px-1 py-0.5"
+                          />
                           <button
                             type="button"
                             onClick={() => updateQty(l.product.id, 1)}
@@ -429,7 +468,7 @@ export default function PosPage() {
             <div className="relative max-w-3xl">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 pointer-events-none" />
               <input
-                placeholder="Buscar por nombre, SKU o código de barras..."
+                placeholder="Buscar por nombre, código de barras o marca..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 text-lg rounded-xl border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all duration-200"
@@ -457,29 +496,7 @@ export default function PosPage() {
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-50 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-500 transition-colors duration-200 mb-3">
                     <Package className="h-5 w-5" />
                   </div>
-                  <p className="font-semibold text-sm text-slate-900 line-clamp-2 leading-snug min-h-[2.5rem]">
-                    {p.name}
-                  </p>
-                  <p className="text-[11px] font-mono text-slate-400 mt-1 truncate">{p.sku}</p>
-                  {p.brand && (
-                    <p className="text-[11px] text-slate-500 truncate">{p.brand}</p>
-                  )}
-                  <p className="text-lg font-bold tabular-nums text-slate-900 mt-3">
-                    {formatCurrency(p.salePriceUsd)}
-                  </p>
-                  {p.salePriceVes != null && (
-                    <p className="text-xs tabular-nums text-indigo-600 font-medium">
-                      {formatCurrency(p.salePriceVes, 'VES')}
-                    </p>
-                  )}
-                  <p
-                    className={cn(
-                      'text-[11px] mt-2 font-medium',
-                      p.stock > 5 ? 'text-slate-400' : 'text-amber-600',
-                    )}
-                  >
-                    Stock: {p.stock}
-                  </p>
+                  <PosProductLabel product={p} />
                 </button>
               ))}
             </div>

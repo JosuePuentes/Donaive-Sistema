@@ -59,7 +59,24 @@ export interface BankAccount {
   accountName: string;
   accountType: string;
   currency: string;
+  balance?: number;
   isActive: boolean;
+}
+
+export interface PaymentMethodTreasury {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+  currency: string;
+  balance: number;
+  bankAccountId: string | null;
+  bankAccount?: {
+    id: string;
+    accountNumber: string;
+    accountName: string;
+    currency: string;
+  } | null;
 }
 
 export interface CreateSupplierInput {
@@ -139,7 +156,7 @@ export interface CxpAbonoLineInput {
 }
 
 export interface CxpAbonoInput {
-  bankAccountId: string;
+  paymentMethodId: string;
   lineas: CxpAbonoLineInput[];
   notes?: string;
 }

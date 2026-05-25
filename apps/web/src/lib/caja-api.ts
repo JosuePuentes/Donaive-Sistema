@@ -30,8 +30,11 @@ export interface EstadoCaja {
     openingBalanceVes: number;
   };
   resumenVentas: {
+    totalCobradoUsd: number;
+    totalFacturadoUsd: number;
     totalVentasUsd: number;
     totalVentasVes: number;
+    totalBsRecibidos: number;
     cantidadVentas: number;
   };
   arqueoEsperado: ArqueoLinea[];

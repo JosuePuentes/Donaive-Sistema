@@ -299,6 +299,7 @@ export class InventoryService {
         unit: true,
       },
       orderBy: { stock: 'asc' },
+      take: 500,
     });
 
     const mapped = products.map((p) => {

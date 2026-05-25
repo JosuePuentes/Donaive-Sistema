@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
+import { customerDisplayName } from '@/lib/customer-display';
 
 interface Customer {
   id: string;
@@ -10,11 +11,6 @@ interface Customer {
   firstName: string | null;
   lastName: string | null;
   phone: string;
-}
-
-function displayName(c: Customer) {
-  if (c.businessName) return c.businessName;
-  return [c.firstName, c.lastName].filter(Boolean).join(' ') || '—';
 }
 
 export default function ClientesPage() {
@@ -29,14 +25,17 @@ export default function ClientesPage() {
     phone: '',
   });
 
-  function load() {
-    const q = search ? `?search=${encodeURIComponent(search)}` : '';
-    apiFetch<Customer[]>(`/customers${q}`).then(setCustomers).catch(() => {});
-  }
+  const [searchDebounced, setSearchDebounced] = useState('');
 
   useEffect(() => {
-    load();
+    const t = setTimeout(() => setSearchDebounced(search), 350);
+    return () => clearTimeout(t);
   }, [search]);
+
+  useEffect(() => {
+    const q = searchDebounced ? `?search=${encodeURIComponent(searchDebounced)}` : '';
+    apiFetch<Customer[]>(`/customers${q}`).then(setCustomers).catch(() => {});
+  }, [searchDebounced]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -64,7 +63,7 @@ export default function ClientesPage() {
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Clientes</h1>
-          <p className="text-sm text-zinc-500">Ficha con teléfono obligatorio</p>
+          <p className="text-sm text-zinc-500">Listado por nombre y apellido · teléfono obligatorio</p>
         </div>
         <button
           type="button"
@@ -86,7 +85,7 @@ export default function ClientesPage() {
         <table className="w-full text-sm">
           <thead className="bg-[var(--muted)]">
             <tr>
-              <th className="text-left p-3">Nombre / Razón social</th>
+              <th className="text-left p-3">Nombre y apellido</th>
               <th className="text-left p-3">RIF</th>
               <th className="text-left p-3">Teléfono</th>
             </tr>
@@ -94,7 +93,7 @@ export default function ClientesPage() {
           <tbody>
             {customers.map((c) => (
               <tr key={c.id} className="border-t border-[var(--border)]">
-                <td className="p-3 font-medium">{displayName(c)}</td>
+                <td className="p-3 font-medium">{customerDisplayName(c)}</td>
                 <td className="p-3">{c.rif ?? '—'}</td>
                 <td className="p-3">{c.phone}</td>
               </tr>
@@ -123,26 +122,28 @@ export default function ClientesPage() {
               onChange={(e) => setForm({ ...form, rif: e.target.value })}
               className="w-full px-3 py-2 border rounded-lg"
             />
-            <input
-              placeholder="Razón social"
-              value={form.businessName}
-              onChange={(e) => setForm({ ...form, businessName: e.target.value })}
-              className="w-full px-3 py-2 border rounded-lg"
-            />
             <div className="grid grid-cols-2 gap-2">
               <input
-                placeholder="Nombre"
+                placeholder="Nombre *"
                 value={form.firstName}
                 onChange={(e) => setForm({ ...form, firstName: e.target.value })}
                 className="px-3 py-2 border rounded-lg"
+                required
               />
               <input
-                placeholder="Apellido"
+                placeholder="Apellido *"
                 value={form.lastName}
                 onChange={(e) => setForm({ ...form, lastName: e.target.value })}
                 className="px-3 py-2 border rounded-lg"
+                required
               />
             </div>
+            <input
+              placeholder="Razón social (opcional)"
+              value={form.businessName}
+              onChange={(e) => setForm({ ...form, businessName: e.target.value })}
+              className="w-full px-3 py-2 border rounded-lg text-sm text-zinc-500"
+            />
             <div className="flex gap-2 justify-end">
               <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 border rounded-lg">
                 Cancelar

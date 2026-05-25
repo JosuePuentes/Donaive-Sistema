@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { TrendingUp, Loader2 } from 'lucide-react';
 import { tasaBcvApi } from '@/lib/tasa-bcv-api';
+import { getCachedBcvRate } from '@/lib/tasa-bcv-cache';
 import { cn } from '@/lib/cn';
 
 export function BcvRateBadge({ variant = 'sidebar' }: { variant?: 'sidebar' | 'navbar' }) {
@@ -11,10 +12,8 @@ export function BcvRateBadge({ variant = 'sidebar' }: { variant?: 'sidebar' | 'n
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    tasaBcvApi
-      .getActual()
-      .then((t) => setRate(t.montoBs))
-      .catch(() => setRate(null))
+    getCachedBcvRate(() => tasaBcvApi.getActual())
+      .then(setRate)
       .finally(() => setLoading(false));
   }, []);
 

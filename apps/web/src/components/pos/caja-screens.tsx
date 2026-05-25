@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Home, Lock, Wallet } from 'lucide-react';
+import { roundCurrency, BASE_CURRENCY } from '@flp/shared';
 import { cajaApi, type EstadoCaja, type ReporteZ } from '@/lib/caja-api';
 import { formatCurrency } from '@/lib/format-currency';
 import { ReporteZView } from '@/components/pos/reporte-z';
@@ -146,8 +147,14 @@ export function CierreCajaScreen({ estado, onClosed, onCancel }: CierreCajaProps
     try {
       const lineas = estado.arqueoEsperado.map((line) => ({
         paymentMethodId: line.paymentMethodId,
-        montoDeclaradoUsd: parseFloat(declarations[line.paymentMethodId]?.usd ?? '0') || 0,
-        montoDeclaradoVes: parseFloat(declarations[line.paymentMethodId]?.ves ?? '0') || 0,
+        montoDeclaradoUsd: roundCurrency(
+          parseFloat(declarations[line.paymentMethodId]?.usd ?? '0') || 0,
+          BASE_CURRENCY,
+        ),
+        montoDeclaradoVes: roundCurrency(
+          parseFloat(declarations[line.paymentMethodId]?.ves ?? '0') || 0,
+          'VES',
+        ),
       }));
       const reporte = await cajaApi.cierre(lineas);
       onClosed(reporte);
@@ -194,7 +201,7 @@ export function CierreCajaScreen({ estado, onClosed, onCancel }: CierreCajaProps
                   <td className="p-3">
                     <input
                       type="number"
-                      step="0.01"
+                      step="0.0001"
                       min="0"
                       value={declarations[line.paymentMethodId]?.usd ?? ''}
                       onChange={(e) =>

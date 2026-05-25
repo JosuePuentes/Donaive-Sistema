@@ -40,7 +40,7 @@ export default function AdjustmentsPage() {
   const load = useCallback(async () => {
     try {
       const [prodRes, adjRes] = await Promise.all([
-        productsApi.listAll({ isActive: true }),
+        productsApi.list({ isActive: true, limit: 100, page: 1 }),
         inventoryApi.adjustments(),
       ]);
       setProducts(prodRes.data);

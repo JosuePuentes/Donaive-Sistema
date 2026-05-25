@@ -35,16 +35,18 @@ export const productsApi = {
     return apiFetch<PaginatedResponse<Product>>(`/products${qs ? `?${qs}` : ''}`);
   },
 
+  /** Solo para exportaciones; máx. 5 páginas (500 ítems). Preferir list() paginado. */
   listAll: async (params?: Record<string, string | number | boolean>) => {
     const all: Product[] = [];
     let page = 1;
     let totalPages = 1;
+    const maxPages = 5;
     do {
-      const res = await productsApi.list({ ...params, page, limit: 200 });
+      const res = await productsApi.list({ ...params, page, limit: 100 });
       all.push(...res.data);
       totalPages = res.meta.totalPages;
       page += 1;
-    } while (page <= totalPages);
+    } while (page <= totalPages && page <= maxPages);
     return { data: all, meta: { total: all.length, page: 1, limit: all.length, totalPages: 1 } };
   },
 

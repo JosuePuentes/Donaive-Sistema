@@ -2,7 +2,7 @@
 const nextConfig = {
   transpilePackages: ['@flp/shared'],
   experimental: {
-    optimizePackageImports: ['lucide-react'],
+    optimizePackageImports: ['lucide-react', 'recharts'],
   },
 };
 

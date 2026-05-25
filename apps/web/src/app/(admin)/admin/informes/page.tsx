@@ -69,7 +69,7 @@ export default function InformesPage() {
         }
       } else if (id === 'clientes') {
         const data = await fetchClientesExport();
-        const headers = ['rif', 'nombre', 'telefono', 'email', 'limiteCreditoUsd'];
+        const headers = ['rif', 'nombre', 'apellido', 'nombreCompleto', 'telefono', 'email', 'limiteCreditoUsd'];
         const rows = data.rows.map((r) => headers.map((h) => r[h] ?? ''));
         if (format === 'csv') downloadCsv('clientes.csv', headers, rows);
         else printReportHtml('Informe de clientes', rowsToTable(data.rows));

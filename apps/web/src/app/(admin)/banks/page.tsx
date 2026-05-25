@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
+import { formatCurrency } from '@/lib/format-currency';
 
 interface Bank {
   id: string;
@@ -14,6 +15,7 @@ interface BankAccount {
   accountNumber: string;
   accountName: string;
   currency: string;
+  balance?: number;
   bank: { id: string; code: string; name: string };
 }
 
@@ -23,6 +25,8 @@ interface PaymentMethod {
   name: string;
   type: string;
   currency: string;
+  balance: number;
+  bankAccountId: string | null;
 }
 
 export default function BanksPage() {
@@ -172,8 +176,13 @@ export default function BanksPage() {
           </form>
           <ul className="text-sm space-y-1 border-t pt-3 max-h-40 overflow-y-auto">
             {accounts.map((a) => (
-              <li key={a.id}>
-                {a.bank.code}: {a.accountName} ({a.currency})
+              <li key={a.id} className="flex justify-between gap-2">
+                <span>
+                  {a.bank.code}: {a.accountName} ({a.currency})
+                </span>
+                <span className="font-mono font-medium tabular-nums">
+                  {formatCurrency(Number(a.balance ?? 0), a.currency as 'USD' | 'VES')}
+                </span>
               </li>
             ))}
           </ul>
@@ -235,8 +244,14 @@ export default function BanksPage() {
           </form>
           <ul className="text-sm space-y-1 border-t pt-3">
             {methods.map((m) => (
-              <li key={m.id}>
-                {m.name} <span className="text-zinc-400">({m.code}, {m.currency})</span>
+              <li key={m.id} className="flex justify-between gap-2">
+                <span>
+                  {m.name}{' '}
+                  <span className="text-zinc-400">({m.code}, {m.currency})</span>
+                </span>
+                <span className="font-mono font-medium tabular-nums text-indigo-700">
+                  {formatCurrency(Number(m.balance ?? 0), m.currency as 'USD' | 'VES')}
+                </span>
               </li>
             ))}
           </ul>

@@ -15,7 +15,17 @@ export interface SaleLine {
   quantity: number;
   unitPriceUsd: number;
   totalUsd: number;
-  product: { sku: string; name: string };
+  product: { name: string; barcode: string | null; brand?: string | null };
+}
+
+export interface VentasResumen {
+  ventasDiaUsd: number;
+  ventasDiaTransacciones: number;
+  ventasMesCobradoUsd: number;
+  ventasMesFacturadoUsd: number;
+  ventasMesVes: number;
+  ventasMesTransacciones: number;
+  tasaBcvActual: number;
 }
 
 export interface Sale {
@@ -78,6 +88,7 @@ export interface SupplierAbonoHistory {
 }
 
 export const salesApi = {
+  resumen: () => apiFetch<VentasResumen>('/sales/resumen'),
   list: () => apiFetch<Sale[]>('/sales'),
 };
 
