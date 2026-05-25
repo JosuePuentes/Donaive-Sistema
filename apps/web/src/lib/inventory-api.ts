@@ -35,6 +35,19 @@ export const productsApi = {
     return apiFetch<PaginatedResponse<Product>>(`/products${qs ? `?${qs}` : ''}`);
   },
 
+  listAll: async (params?: Record<string, string | number | boolean>) => {
+    const all: Product[] = [];
+    let page = 1;
+    let totalPages = 1;
+    do {
+      const res = await productsApi.list({ ...params, page, limit: 200 });
+      all.push(...res.data);
+      totalPages = res.meta.totalPages;
+      page += 1;
+    } while (page <= totalPages);
+    return { data: all, meta: { total: all.length, page: 1, limit: all.length, totalPages: 1 } };
+  },
+
   get: (id: string) => apiFetch<Product>(`/products/${id}`),
 
   create: (data: CreateProductInput) =>

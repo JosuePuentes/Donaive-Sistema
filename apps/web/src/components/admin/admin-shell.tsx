@@ -102,7 +102,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex bg-slate-50">
       <aside className="hidden lg:flex w-64 flex-col border-r border-slate-200/80 bg-white shrink-0">
         <div className="p-5 border-b border-slate-100">
-          <Link href="/dashboard" className="flex items-center gap-3 group">
+          <Link href="/" className="flex items-center gap-3 group">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white font-bold text-sm shadow-sm shadow-indigo-600/30 transition-transform duration-200 group-hover:scale-105">
               D
             </div>

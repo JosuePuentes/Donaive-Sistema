@@ -32,6 +32,8 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -51,10 +53,14 @@ export default function ProductsPage() {
     setError('');
     try {
       const [prodRes, cats] = await Promise.all([
-        productsApi.list({ search, lowStock: lowStockOnly, limit: 50 }),
+        productsApi.listAll({
+          ...(search ? { search } : {}),
+          ...(lowStockOnly ? { lowStock: true } : {}),
+        }),
         productsApi.categories(),
       ]);
       setProducts(prodRes.data);
+      setTotalCount(prodRes.meta.total);
       setCategories(cats);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al cargar productos');
@@ -67,11 +73,37 @@ export default function ProductsPage() {
     load();
   }, [load]);
 
-  async function handleCreate(e: React.FormEvent) {
+  function openCreate() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setShowForm(true);
+  }
+
+  function openEdit(p: Product) {
+    setEditingId(p.id);
+    setForm({
+      sku: p.sku,
+      barcode: p.barcode ?? '',
+      name: p.name,
+      brand: p.brand ?? '',
+      description: p.description ?? '',
+      categoryId: p.categoryId ?? '',
+      unit: p.unit,
+      costUsd: p.costUsd,
+      marginPercent: p.marginPercent,
+      minStock: p.minStock,
+      maxStock: p.maxStock != null ? String(p.maxStock) : '',
+      allowNegativeStock: p.allowNegativeStock,
+      initialStock: 0,
+    });
+    setShowForm(true);
+  }
+
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
-      await productsApi.create({
+      const payload = {
         sku: form.sku,
         barcode: form.barcode || undefined,
         name: form.name,
@@ -84,13 +116,21 @@ export default function ProductsPage() {
         minStock: Number(form.minStock),
         maxStock: form.maxStock ? Number(form.maxStock) : undefined,
         allowNegativeStock: form.allowNegativeStock,
-        initialStock: Number(form.initialStock),
-      });
+      };
+      if (editingId) {
+        await productsApi.update(editingId, payload);
+      } else {
+        await productsApi.create({
+          ...payload,
+          initialStock: Number(form.initialStock),
+        });
+      }
       setShowForm(false);
+      setEditingId(null);
       setForm(emptyForm);
       await load();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error al crear producto');
+      alert(err instanceof Error ? err.message : 'Error al guardar producto');
     } finally {
       setSaving(false);
     }
@@ -122,7 +162,9 @@ export default function ProductsPage() {
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Productos</h1>
-          <p className="text-sm text-zinc-500">Catálogo e inventario inicial</p>
+          <p className="text-sm text-zinc-500">
+            {loading ? 'Cargando...' : `${totalCount} producto${totalCount !== 1 ? 's' : ''} en catálogo`}
+          </p>
         </div>
         <div className="flex gap-2">
           <label className="px-4 py-2 border border-[var(--border)] rounded-lg text-sm font-medium cursor-pointer hover:bg-[var(--muted)]">
@@ -153,6 +195,7 @@ export default function ProductsPage() {
                     `Importados: ${res.ok}/${res.total}. Fallidos: ${res.failed}` +
                       (failedDetail ? ` (${failedDetail})` : ''),
                   );
+                  setSearch('');
                   await load();
                 } catch (err) {
                   setImportResult(err instanceof Error ? err.message : 'Error en importación');
@@ -171,7 +214,8 @@ export default function ProductsPage() {
             + Categoría
           </button>
           <button
-            onClick={() => setShowForm(true)}
+            type="button"
+            onClick={openCreate}
             className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg text-sm font-medium"
           >
             + Nuevo producto
@@ -182,8 +226,8 @@ export default function ProductsPage() {
       {importing && <p className="text-sm text-indigo-600">Importando productos...</p>}
       {importResult && <p className="text-sm text-slate-600">{importResult}</p>}
       <p className="text-xs text-zinc-500">
-        Excel (.xlsx) o CSV. Columnas: codigo, descripcion, marca, costo, utilidad, stock. La utilidad puede ir como{' '}
-        <strong>30</strong> o <strong>30%</strong> (porcentaje sobre el costo).
+        Excel (.xlsx) o CSV. Columnas: codigo, descripcion, marca, costo, utilidad, stock. Costo con coma o punto:{' '}
+        <strong>2,50</strong> o <strong>2.50</strong> o <strong>1.500,50</strong>. Utilidad: <strong>30</strong> o <strong>30%</strong>.
       </p>
 
       <div className="flex gap-3 flex-wrap">
@@ -223,12 +267,12 @@ export default function ProductsPage() {
                 <th className="text-right p-3">Utilidad %</th>
                 <th className="text-right p-3">Stock</th>
                 <th className="text-right p-3">Precio USD</th>
-                <th className="text-center p-3">Kardex</th>
+                <th className="text-center p-3">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {products.map((p) => (
-                <tr key={p.id} className="border-t border-[var(--border)]">
+                <tr key={p.id} className="border-t border-[var(--border)] hover:bg-[var(--muted)]/50">
                   <td className="p-3 font-mono text-xs">{p.sku}</td>
                   <td className="p-3">
                     <p className="font-medium">{p.name}</p>
@@ -243,9 +287,16 @@ export default function ProductsPage() {
                     {p.stock}
                   </td>
                   <td className="p-3 text-right">{formatCurrency(p.salePriceUsd)}</td>
-                  <td className="p-3 text-center">
-                    <Link href={`/inventory/kardex?productId=${p.id}`} className="text-[var(--primary)] hover:underline text-xs">
-                      Ver
+                  <td className="p-3 text-center whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(p)}
+                      className="text-[var(--primary)] hover:underline text-xs font-medium mr-3"
+                    >
+                      Editar
+                    </button>
+                    <Link href={`/inventory/kardex?productId=${p.id}`} className="text-zinc-500 hover:underline text-xs">
+                      Kardex
                     </Link>
                   </td>
                 </tr>
@@ -303,13 +354,19 @@ export default function ProductsPage() {
       {showForm && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
           <form
-            onSubmit={handleCreate}
+            onSubmit={handleSave}
             className="bg-[var(--background)] border border-[var(--border)] rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-4"
           >
-            <h2 className="text-lg font-bold">Nuevo Producto</h2>
+            <h2 className="text-lg font-bold">{editingId ? 'Editar producto' : 'Nuevo producto'}</h2>
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label="SKU *" value={form.sku} onChange={(v) => setForm({ ...form, sku: v })} required />
+              <Field
+                label="Código (SKU) *"
+                value={form.sku}
+                onChange={(v) => setForm({ ...form, sku: v })}
+                required
+                disabled={!!editingId}
+              />
               <Field label="Código de barras" value={form.barcode} onChange={(v) => setForm({ ...form, barcode: v })} />
             </div>
             <Field label="Descripción (nombre) *" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
@@ -367,11 +424,18 @@ export default function ProductsPage() {
               </p>
             )}
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className={`grid gap-3 ${editingId ? 'grid-cols-2' : 'grid-cols-3'}`}>
               <Field label="Stock mínimo" type="number" value={String(form.minStock)} onChange={(v) => setForm({ ...form, minStock: Number(v) })} />
               <Field label="Stock máximo" type="number" value={form.maxStock} onChange={(v) => setForm({ ...form, maxStock: v })} />
-              <Field label="Stock inicial" type="number" value={String(form.initialStock)} onChange={(v) => setForm({ ...form, initialStock: Number(v) })} />
+              {!editingId && (
+                <Field label="Stock inicial" type="number" value={String(form.initialStock)} onChange={(v) => setForm({ ...form, initialStock: Number(v) })} />
+              )}
             </div>
+            {editingId && (
+              <p className="text-xs text-zinc-500">
+                Para cambiar existencias use Kardex o Ajustes de inventario.
+              </p>
+            )}
 
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -383,11 +447,18 @@ export default function ProductsPage() {
             </label>
 
             <div className="flex gap-3 justify-end pt-2">
-              <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 border border-[var(--border)] rounded-lg text-sm">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForm(false);
+                  setEditingId(null);
+                }}
+                className="px-4 py-2 border border-[var(--border)] rounded-lg text-sm"
+              >
                 Cancelar
               </button>
               <button type="submit" disabled={saving} className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg text-sm disabled:opacity-50">
-                {saving ? 'Guardando...' : 'Crear producto'}
+                {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Crear producto'}
               </button>
             </div>
           </form>
@@ -403,12 +474,14 @@ function Field({
   onChange,
   type = 'text',
   required,
+  disabled,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   type?: string;
   required?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <div>
@@ -418,8 +491,9 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required={required}
+        disabled={disabled}
         step={type === 'number' ? 'any' : undefined}
-        className="w-full mt-1 px-3 py-2 border border-[var(--border)] rounded-lg bg-[var(--background)]"
+        className="w-full mt-1 px-3 py-2 border border-[var(--border)] rounded-lg bg-[var(--background)] disabled:opacity-60"
       />
     </div>
   );

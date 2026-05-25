@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Lock, Wallet } from 'lucide-react';
+import { Home, Lock, Wallet } from 'lucide-react';
 import { cajaApi, type EstadoCaja, type ReporteZ } from '@/lib/caja-api';
 import { formatCurrency } from '@/lib/format-currency';
 import { ReporteZView } from '@/components/pos/reporte-z';
@@ -44,6 +44,14 @@ export function AperturaCajaScreen({ onSuccess }: AperturaCajaProps) {
         <p className="mt-4 text-2xl font-bold tracking-tight text-slate-900">Donaive</p>
         <p className="text-sm text-slate-500 mt-1">Punto de venta</p>
       </div>
+
+      <Link
+        href="/"
+        className="mb-6 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-indigo-700 shadow-sm hover:bg-indigo-50 transition-colors"
+      >
+        <Home className="h-4 w-4" />
+        Inicio
+      </Link>
 
       <form
         onSubmit={handleSubmit}
