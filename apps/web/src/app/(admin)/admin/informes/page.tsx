@@ -10,6 +10,7 @@ import {
   fetchVentasExport,
 } from '@/lib/reports-export-fallback';
 import { downloadCsv, printReportHtml } from '@/lib/export-csv';
+import { downloadVentasInformeCsv, ventasResumenHtml } from '@/lib/ventas-export-csv';
 
 type ReportId =
   | 'ventas'
@@ -56,12 +57,15 @@ export default function InformesPage() {
     try {
       if (id === 'ventas') {
         const data = await fetchVentasExport(range.from, range.to);
-        const headers = ['fecha', 'factura', 'cliente', 'codigo', 'descripcion', 'marca', 'cantidad', 'totalUsd', 'totalVes'];
-        const rows = data.rows.map((r) => headers.map((h) => r[h] ?? ''));
         if (format === 'csv') {
-          downloadCsv(`ventas_${range.from}_${range.to}.csv`, headers, rows);
+          downloadVentasInformeCsv(data, `ventas_${range.from}_${range.to}.csv`);
         } else {
-          printReportHtml(`Ventas ${range.from} — ${range.to}`, rowsToTable(data.rows));
+          const pagosTable = rowsToTable(data.pagos ?? data.rows);
+          const resumenTable = ventasResumenHtml(data);
+          printReportHtml(
+            `Ventas ${range.from} — ${range.to}`,
+            `${resumenTable}<h2 style="margin-top:24px;font-size:14px">Detalle de pagos</h2>${pagosTable}`,
+          );
         }
       } else if (id === 'clientes') {
         const data = await fetchClientesExport();

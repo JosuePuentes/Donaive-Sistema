@@ -7,11 +7,27 @@ import type {
   VentasDiariasReport,
 } from '@/types/reports';
 
+export interface VentasResumenPagos {
+  totalBsEfectivo: number;
+  totalBsDebito: number;
+  totalBsPagoMovil: number;
+  totalBsTransferencia: number;
+  totalBs: number;
+  totalUsdEfectivo: number;
+  totalUsdZelle: number;
+  totalUsd: number;
+}
+
 export interface ExportRowsResponse {
   from?: string;
   to?: string;
   rows: Array<Record<string, string | number>>;
   totalFacturas?: number;
+  totalPagos?: number;
+  resumen?: VentasResumenPagos;
+  pagos?: Array<Record<string, string | number>>;
+  productos?: Array<Record<string, string | number>>;
+  resumenFilas?: Array<Record<string, string | number>>;
 }
 
 export interface ExportBancosResponse {

@@ -555,52 +555,190 @@ export class ReportsService {
   }
 
   async exportVentasGeneral(from: Date, to: Date) {
-    const invoices = await this.prisma.invoice.findMany({
+    const payments = await this.prisma.documentPayment.findMany({
       where: {
-        status: 'CONFIRMED',
-        documentType: { in: ['INVOICE', 'POS_SALE'] },
-        confirmedAt: { gte: from, lte: to },
+        invoiceId: { not: null },
+        paidAt: { gte: from, lte: to },
+        invoice: {
+          status: 'CONFIRMED',
+          documentType: { in: ['INVOICE', 'POS_SALE'] },
+        },
       },
       include: {
-        customer: {
-          select: { businessName: true, firstName: true, lastName: true, phone: true, rif: true },
+        paymentMethod: {
+          select: { code: true, name: true, type: true, currency: true },
         },
-        details: {
-          include: {
-            product: { select: { sku: true, name: true, brand: true } },
+        invoice: {
+          select: {
+            id: true,
+            number: true,
+            confirmedAt: true,
+            totalUsd: true,
+            totalVes: true,
+            customer: {
+              select: { businessName: true, firstName: true, lastName: true, phone: true },
+            },
+            details: {
+              include: {
+                product: { select: { sku: true, name: true, brand: true } },
+              },
+            },
           },
         },
       },
-      orderBy: { confirmedAt: 'desc' },
+      orderBy: { paidAt: 'desc' },
     });
 
-    const rows: Array<Record<string, string | number>> = [];
-    for (const inv of invoices) {
+    const resumen = {
+      totalBsEfectivo: 0,
+      totalBsDebito: 0,
+      totalBsPagoMovil: 0,
+      totalBsTransferencia: 0,
+      totalBs: 0,
+      totalUsdEfectivo: 0,
+      totalUsdZelle: 0,
+      totalUsd: 0,
+    };
+
+    const pagos: Array<Record<string, string | number>> = [];
+    const productos: Array<Record<string, string | number>> = [];
+    const invoiceIdsDone = new Set<string>();
+
+    for (const p of payments) {
+      const inv = p.invoice;
+      if (!inv) continue;
+
       const cliente =
         inv.customer?.businessName ||
         [inv.customer?.firstName, inv.customer?.lastName].filter(Boolean).join(' ') ||
         '—';
-      for (const d of inv.details) {
-        rows.push({
-          fecha: inv.confirmedAt?.toISOString().slice(0, 10) ?? '',
-          factura: inv.number,
-          cliente,
-          codigo: d.product.sku,
-          descripcion: d.product.name,
-          marca: d.product.brand ?? '',
-          cantidad: Number(d.quantity),
-          totalUsd: Number(d.totalUsd),
-          totalVes: Number(d.totalVes),
-        });
+
+      const montoOriginal = Number(p.amount);
+      const montoUsd = Number(p.amountUsd);
+      const montoBs =
+        p.currency === 'VES'
+          ? montoOriginal
+          : roundCurrency(usdToVes(montoUsd, Number(p.tasaBcvMomento)), TRANSACTION_CURRENCY);
+
+      this.acumularPagoEnResumen(p.paymentMethod.type, p.currency, montoBs, montoUsd, resumen);
+
+      pagos.push({
+        fecha: p.paidAt.toISOString().slice(0, 10),
+        hora: p.paidAt.toISOString().slice(11, 19),
+        factura: inv.number,
+        cliente,
+        metodoPago: p.paymentMethod.name,
+        codigoMetodo: p.paymentMethod.code,
+        tipoMetodo: p.paymentMethod.type,
+        moneda: p.currency,
+        monto: roundCurrency(montoOriginal, p.currency === 'VES' ? TRANSACTION_CURRENCY : BASE_CURRENCY),
+        montoBs: roundCurrency(montoBs, TRANSACTION_CURRENCY),
+        montoUsd: roundCurrency(montoUsd, BASE_CURRENCY),
+        referencia: p.reference ?? '',
+      });
+
+      if (!invoiceIdsDone.has(inv.id)) {
+        invoiceIdsDone.add(inv.id);
+        for (const d of inv.details) {
+          productos.push({
+            fecha: inv.confirmedAt?.toISOString().slice(0, 10) ?? '',
+            factura: inv.number,
+            cliente,
+            codigo: d.product.sku,
+            descripcion: d.product.name,
+            marca: d.product.brand ?? '',
+            cantidad: Number(d.quantity),
+            totalLineaUsd: Number(d.totalUsd),
+            totalLineaBs: Number(d.totalVes),
+          });
+        }
       }
     }
+
+    const resumenFilas: Array<Record<string, string | number>> = [
+      { concepto: 'Total Bs — Efectivo', montoBs: resumen.totalBsEfectivo, montoUsd: 0 },
+      { concepto: 'Total Bs — Débito', montoBs: resumen.totalBsDebito, montoUsd: 0 },
+      { concepto: 'Total Bs — Pago móvil', montoBs: resumen.totalBsPagoMovil, montoUsd: 0 },
+      { concepto: 'Total Bs — Transferencia', montoBs: resumen.totalBsTransferencia, montoUsd: 0 },
+      { concepto: 'TOTAL BOLÍVARES', montoBs: resumen.totalBs, montoUsd: 0 },
+      { concepto: 'Total USD — Efectivo', montoBs: 0, montoUsd: resumen.totalUsdEfectivo },
+      { concepto: 'Total USD — Zelle', montoBs: 0, montoUsd: resumen.totalUsdZelle },
+      { concepto: 'TOTAL DÓLARES', montoBs: 0, montoUsd: resumen.totalUsd },
+    ];
+
+    Object.keys(resumen).forEach((k) => {
+      const key = k as keyof typeof resumen;
+      resumen[key] = roundCurrency(
+        resumen[key],
+        k.startsWith('totalBs') || k === 'totalBs' ? TRANSACTION_CURRENCY : BASE_CURRENCY,
+      );
+    });
 
     return {
       from: from.toISOString(),
       to: to.toISOString(),
-      totalFacturas: invoices.length,
-      rows,
+      totalFacturas: invoiceIdsDone.size,
+      totalPagos: payments.length,
+      resumen,
+      pagos,
+      productos,
+      resumenFilas,
+      rows: pagos,
     };
+  }
+
+  private acumularPagoEnResumen(
+    type: string,
+    currency: string,
+    montoBs: number,
+    montoUsd: number,
+    resumen: {
+      totalBsEfectivo: number;
+      totalBsDebito: number;
+      totalBsPagoMovil: number;
+      totalBsTransferencia: number;
+      totalBs: number;
+      totalUsdEfectivo: number;
+      totalUsdZelle: number;
+      totalUsd: number;
+    },
+  ) {
+    switch (type) {
+      case 'CASH_VES':
+        resumen.totalBsEfectivo += montoBs;
+        resumen.totalBs += montoBs;
+        break;
+      case 'DEBIT_CARD':
+        resumen.totalBsDebito += montoBs;
+        resumen.totalBs += montoBs;
+        break;
+      case 'MOBILE_PAYMENT':
+        resumen.totalBsPagoMovil += montoBs;
+        resumen.totalBs += montoBs;
+        break;
+      case 'BANK_TRANSFER':
+        if (currency === 'VES') {
+          resumen.totalBsTransferencia += montoBs;
+          resumen.totalBs += montoBs;
+        } else {
+          resumen.totalUsd += montoUsd;
+        }
+        break;
+      case 'CASH_USD':
+        resumen.totalUsdEfectivo += montoUsd;
+        resumen.totalUsd += montoUsd;
+        break;
+      case 'ZELLE':
+        resumen.totalUsdZelle += montoUsd;
+        resumen.totalUsd += montoUsd;
+        break;
+      default:
+        if (currency === 'VES') {
+          resumen.totalBs += montoBs;
+        } else {
+          resumen.totalUsd += montoUsd;
+        }
+    }
   }
 
   async exportClientes() {
