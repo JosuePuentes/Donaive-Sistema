@@ -18,6 +18,7 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { ListProductsQueryDto } from './dto/list-products.dto';
 import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
 import { ImportProductRowDto } from './dto/import-products.dto';
+import { mergeImportRows, normalizeImportSku } from './utils/import-rows.util';
 
 @Injectable()
 export class ProductsService {
@@ -259,32 +260,92 @@ export class ProductsService {
     return this.prisma.productCategory.update({ where: { id }, data: dto });
   }
 
+  async previewImport(rows: ImportProductRowDto[]) {
+    const merged = mergeImportRows(
+      rows.map((r) => ({ ...r, sku: normalizeImportSku(r.sku) })).filter((r) => r.sku),
+    );
+
+    const preview = await Promise.all(
+      merged.map(async (row) => {
+        const existing = await this.prisma.product.findUnique({ where: { sku: row.sku } });
+        const stockToAdd = row.stock ?? 0;
+        const currentStock = existing ? Number(existing.stock) : 0;
+
+        return {
+          sku: row.sku,
+          name: row.name,
+          brand: row.brand ?? '',
+          costUsd: row.costUsd,
+          marginPercent: row.marginPercent,
+          stockToAdd,
+          action: existing ? ('UPDATE' as const) : ('CREATE' as const),
+          currentName: existing?.name ?? null,
+          currentStock,
+          stockAfter: existing ? currentStock + stockToAdd : stockToAdd,
+        };
+      }),
+    );
+
+    return {
+      originalRows: rows.length,
+      mergedRows: merged.length,
+      toCreate: preview.filter((p) => p.action === 'CREATE').length,
+      toUpdate: preview.filter((p) => p.action === 'UPDATE').length,
+      rows: preview,
+    };
+  }
+
   async importBulk(rows: ImportProductRowDto[], userId: string) {
+    const merged = mergeImportRows(
+      rows.map((r) => ({ ...r, sku: normalizeImportSku(r.sku) })).filter((r) => r.sku),
+    );
     const results: Array<{ sku: string; ok: boolean; error?: string }> = [];
 
-    for (const row of rows) {
+    for (const row of merged) {
       try {
         const existing = await this.prisma.product.findUnique({ where: { sku: row.sku } });
         if (existing) {
           const costUsd = row.costUsd;
           const marginPercent = row.marginPercent;
           const salePriceUsd = calculateSalePriceUsd(costUsd, marginPercent);
-          const stockUpdate =
-            row.stock != null && row.stock > 0 ? { stock: row.stock } : {};
+          const addStock = row.stock ?? 0;
 
-          await this.prisma.product.update({
-            where: { id: existing.id },
-            data: {
-              name: row.name,
-              brand: row.brand ?? existing.brand ?? '',
-              barcode: row.barcode ?? existing.barcode,
-              description: row.description ?? existing.description,
-              costUsd,
-              marginPercent,
-              salePriceUsd,
-              ...stockUpdate,
-            },
+          await this.prisma.$transaction(async (tx) => {
+            const updated = await tx.product.update({
+              where: { id: existing.id },
+              data: {
+                name: row.name,
+                brand: row.brand ?? existing.brand ?? '',
+                barcode: row.barcode ?? existing.barcode,
+                description: row.description ?? existing.description,
+                costUsd,
+                marginPercent,
+                salePriceUsd,
+                ...(addStock > 0 ? { stock: { increment: addStock } } : {}),
+              },
+            });
+
+            if (addStock > 0) {
+              const unitCostUsd = roundCurrency(costUsd, BASE_CURRENCY);
+              await tx.inventoryMovement.create({
+                data: {
+                  productId: existing.id,
+                  movementType: 'ADJUSTMENT_IN',
+                  quantity: addStock,
+                  unitCostUsd,
+                  totalCostUsd: roundCurrency(addStock * unitCostUsd, BASE_CURRENCY),
+                  stockBefore: Number(existing.stock),
+                  stockAfter: Number(updated.stock),
+                  referenceType: 'PRODUCT_IMPORT',
+                  referenceId: existing.id,
+                  referenceNumber: row.sku,
+                  notes: 'Entrada por importación Excel',
+                  createdById: userId,
+                },
+              });
+            }
           });
+
           results.push({ sku: row.sku, ok: true });
         } else {
           await this.create(
@@ -312,7 +373,13 @@ export class ProductsService {
     }
 
     const ok = results.filter((r) => r.ok).length;
-    return { total: rows.length, ok, failed: rows.length - ok, results };
+    return {
+      total: merged.length,
+      originalRows: rows.length,
+      ok,
+      failed: merged.length - ok,
+      results,
+    };
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────

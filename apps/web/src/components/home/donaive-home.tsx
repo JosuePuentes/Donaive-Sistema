@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import {
   LayoutDashboard,
+  FileText,
   Package,
   ShoppingCart,
   Truck,
@@ -13,7 +14,8 @@ import {
 } from 'lucide-react';
 
 const modules = [
-  { href: '/dashboard', label: 'Informes', desc: 'KPIs y reportes', icon: LayoutDashboard },
+  { href: '/dashboard', label: 'Tablero', desc: 'KPIs en tiempo real', icon: LayoutDashboard },
+  { href: '/admin/informes', label: 'Informes', desc: 'Exportar PDF y Excel', icon: FileText },
   { href: '/pos', label: 'Punto de venta', desc: 'Caja y facturación', icon: ShoppingCart },
   { href: '/inventory/products', label: 'Inventario', desc: 'Productos y kardex', icon: Package },
   { href: '/admin/compras', label: 'Compras', desc: 'Órdenes y CxP', icon: Truck },

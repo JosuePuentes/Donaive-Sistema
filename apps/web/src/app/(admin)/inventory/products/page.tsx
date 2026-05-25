@@ -42,6 +42,24 @@ export default function ProductsPage() {
   const [categoryName, setCategoryName] = useState('');
   const [categoryDescription, setCategoryDescription] = useState('');
   const [savingCategory, setSavingCategory] = useState(false);
+  const [importPreview, setImportPreview] = useState<{
+    originalRows: number;
+    mergedRows: number;
+    toCreate: number;
+    toUpdate: number;
+    rows: Array<{
+      sku: string;
+      name: string;
+      action: 'CREATE' | 'UPDATE';
+      stockToAdd: number;
+      currentStock: number;
+      stockAfter: number;
+      currentName: string | null;
+    }>;
+  } | null>(null);
+  const [pendingImportRows, setPendingImportRows] = useState<
+    import('@/lib/product-import-parser').ProductImportRow[]
+  >([]);
 
   const previewSalePrice =
     Number(form.costUsd) > 0
@@ -178,6 +196,7 @@ export default function ProductsPage() {
                 if (!file) return;
                 setImporting(true);
                 setImportResult(null);
+                setImportPreview(null);
                 try {
                   const rows = await parseProductImportFile(file);
                   if (rows.length === 0) {
@@ -185,20 +204,11 @@ export default function ProductsPage() {
                       'No se leyeron productos. Use Excel (.xlsx) o CSV con encabezados: codigo, descripcion, marca, costo, utilidad, stock',
                     );
                   }
-                  const res = await productsApi.importBulk(rows);
-                  const failedDetail = res.results
-                    .filter((r) => !r.ok)
-                    .slice(0, 5)
-                    .map((r) => `${r.sku}: ${r.error ?? 'error'}`)
-                    .join(' · ');
-                  setImportResult(
-                    `Importados: ${res.ok}/${res.total}. Fallidos: ${res.failed}` +
-                      (failedDetail ? ` (${failedDetail})` : ''),
-                  );
-                  setSearch('');
-                  await load();
+                  const preview = await productsApi.previewImport(rows);
+                  setPendingImportRows(rows);
+                  setImportPreview(preview);
                 } catch (err) {
-                  setImportResult(err instanceof Error ? err.message : 'Error en importación');
+                  setImportResult(err instanceof Error ? err.message : 'Error al leer archivo');
                 } finally {
                   setImporting(false);
                   e.target.value = '';
@@ -310,6 +320,93 @@ export default function ProductsPage() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {importPreview && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[70]">
+          <div className="bg-[var(--background)] border rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="p-5 border-b">
+              <h2 className="text-lg font-bold">Vista previa de importación</h2>
+              <p className="text-sm text-zinc-500 mt-1">
+                Filas en archivo: {importPreview.originalRows} → Códigos únicos:{' '}
+                {importPreview.mergedRows} ({importPreview.toCreate} nuevos,{' '}
+                {importPreview.toUpdate} actualizaciones). Mismo código = mismo producto; el stock se suma.
+              </p>
+            </div>
+            <div className="overflow-auto flex-1 p-4">
+              <table className="w-full text-sm">
+                <thead className="bg-[var(--muted)] sticky top-0">
+                  <tr>
+                    <th className="text-left p-2">Código</th>
+                    <th className="text-left p-2">Acción</th>
+                    <th className="text-left p-2">Descripción (archivo)</th>
+                    <th className="text-left p-2">Nombre actual</th>
+                    <th className="text-right p-2">Stock +</th>
+                    <th className="text-right p-2">Stock final</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importPreview.rows.map((r) => (
+                    <tr key={r.sku} className="border-t">
+                      <td className="p-2 font-mono text-xs">{r.sku}</td>
+                      <td className="p-2">
+                        <span
+                          className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            r.action === 'CREATE'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {r.action === 'CREATE' ? 'Nuevo' : 'Actualizar'}
+                        </span>
+                      </td>
+                      <td className="p-2">{r.name}</td>
+                      <td className="p-2 text-zinc-500">{r.currentName ?? '—'}</td>
+                      <td className="p-2 text-right">+{r.stockToAdd}</td>
+                      <td className="p-2 text-right font-medium">{r.stockAfter}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="p-4 border-t flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setImportPreview(null);
+                  setPendingImportRows([]);
+                }}
+                className="px-4 py-2 border rounded-lg text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={importing}
+                onClick={async () => {
+                  setImporting(true);
+                  try {
+                    const res = await productsApi.importBulk(pendingImportRows);
+                    setImportPreview(null);
+                    setPendingImportRows([]);
+                    setImportResult(
+                      `Importados: ${res.ok}/${res.total}. Fallidos: ${res.failed}`,
+                    );
+                    setSearch('');
+                    await load();
+                  } catch (err) {
+                    alert(err instanceof Error ? err.message : 'Error');
+                  } finally {
+                    setImporting(false);
+                  }
+                }}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {importing ? 'Importando...' : 'Confirmar importación'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

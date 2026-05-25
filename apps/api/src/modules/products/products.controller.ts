@@ -64,6 +64,12 @@ export class ProductsController {
     return this.productsService.findOne(id);
   }
 
+  @Post('import/preview')
+  @RequirePermissions('PRODUCTS_MANAGE')
+  previewImport(@Body() dto: ImportProductsDto) {
+    return this.productsService.previewImport(dto.rows);
+  }
+
   @Post('import')
   @RequirePermissions('PRODUCTS_MANAGE')
   importBulk(@Body() dto: ImportProductsDto, @CurrentUser() user: AuthenticatedUser) {

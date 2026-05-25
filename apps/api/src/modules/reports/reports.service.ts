@@ -544,4 +544,162 @@ export class ReportsService {
       flujoSemanal,
     };
   }
+
+  parseDateRange(fromStr?: string, toStr?: string) {
+    const to = toStr ? new Date(toStr) : new Date();
+    const from = fromStr ? new Date(fromStr) : new Date(to);
+    if (!fromStr) from.setDate(from.getDate() - 30);
+    from.setHours(0, 0, 0, 0);
+    to.setHours(23, 59, 59, 999);
+    return { from, to };
+  }
+
+  async exportVentasGeneral(from: Date, to: Date) {
+    const invoices = await this.prisma.invoice.findMany({
+      where: {
+        status: 'CONFIRMED',
+        documentType: { in: ['INVOICE', 'POS_SALE'] },
+        confirmedAt: { gte: from, lte: to },
+      },
+      include: {
+        customer: {
+          select: { businessName: true, firstName: true, lastName: true, phone: true, rif: true },
+        },
+        details: {
+          include: {
+            product: { select: { sku: true, name: true, brand: true } },
+          },
+        },
+      },
+      orderBy: { confirmedAt: 'desc' },
+    });
+
+    const rows: Array<Record<string, string | number>> = [];
+    for (const inv of invoices) {
+      const cliente =
+        inv.customer?.businessName ||
+        [inv.customer?.firstName, inv.customer?.lastName].filter(Boolean).join(' ') ||
+        '—';
+      for (const d of inv.details) {
+        rows.push({
+          fecha: inv.confirmedAt?.toISOString().slice(0, 10) ?? '',
+          factura: inv.number,
+          cliente,
+          codigo: d.product.sku,
+          descripcion: d.product.name,
+          marca: d.product.brand ?? '',
+          cantidad: Number(d.quantity),
+          totalUsd: Number(d.totalUsd),
+          totalVes: Number(d.totalVes),
+        });
+      }
+    }
+
+    return {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      totalFacturas: invoices.length,
+      rows,
+    };
+  }
+
+  async exportClientes() {
+    const customers = await this.prisma.customer.findMany({
+      where: { isActive: true },
+      orderBy: { businessName: 'asc' },
+    });
+
+    return {
+      rows: customers.map((c) => ({
+        rif: c.rif ?? '',
+        nombre:
+          c.businessName ||
+          [c.firstName, c.lastName].filter(Boolean).join(' ') ||
+          '',
+        telefono: c.phone,
+        email: c.email ?? '',
+        limiteCreditoUsd: Number(c.creditLimitUsd),
+      })),
+    };
+  }
+
+  async exportMovimientosUnidades(from: Date, to: Date) {
+    const movements = await this.prisma.inventoryMovement.findMany({
+      where: { createdAt: { gte: from, lte: to } },
+      include: {
+        product: { select: { sku: true, name: true, brand: true } },
+        createdBy: { select: { firstName: true, lastName: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      rows: movements.map((m) => ({
+        fecha: m.createdAt.toISOString().slice(0, 10),
+        hora: m.createdAt.toISOString().slice(11, 19),
+        codigo: m.product.sku,
+        producto: m.product.name,
+        marca: m.product.brand ?? '',
+        tipo: m.movementType,
+        cantidad: Number(m.quantity),
+        stockAntes: Number(m.stockBefore),
+        stockDespues: Number(m.stockAfter),
+        costoUsd: Number(m.unitCostUsd),
+        referencia: m.referenceNumber ?? '',
+        usuario: `${m.createdBy.firstName} ${m.createdBy.lastName}`,
+      })),
+    };
+  }
+
+  async exportPlanificacionCompra(coverageDays = 45) {
+    const data = await this.getAnalisisInventario(coverageDays);
+    return {
+      coverageDays,
+      rows: data.sugeridosCompra.map((p) => ({
+        codigo: p.sku,
+        producto: p.name,
+        categoria: p.category ?? '',
+        stock: p.stock,
+        vmd: p.vmd,
+        diasCobertura: p.runwayDays ?? '',
+        cantidadSugerida: p.suggestedQty,
+        claseAbc: p.abcClass,
+        costoUsd: p.costUsd,
+        prioridad: p.priorityScore,
+      })),
+    };
+  }
+
+  async exportBancos() {
+    const [banks, methods, accounts] = await Promise.all([
+      this.prisma.bank.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } }),
+      this.prisma.paymentMethod.findMany({
+        where: { isActive: true },
+        orderBy: { sortOrder: 'asc' },
+      }),
+      this.prisma.bankAccount.findMany({
+        where: { isActive: true },
+        include: { bank: { select: { code: true, name: true } } },
+      }),
+    ]);
+
+    return {
+      bancos: banks.map((b) => ({ codigo: b.code, nombre: b.name })),
+      cuentas: accounts.map((a) => ({
+        banco: a.bank.code,
+        cuenta: a.accountNumber,
+        nombre: a.accountName,
+        moneda: a.currency,
+        saldo: Number(a.balance),
+      })),
+      metodosPago: methods.map((m) => ({
+        codigo: m.code,
+        nombre: m.name,
+        tipo: m.type,
+        moneda: m.currency,
+      })),
+    };
+  }
 }

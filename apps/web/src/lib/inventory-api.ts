@@ -67,6 +67,32 @@ export const productsApi = {
       body: JSON.stringify({ name, description }),
     }),
 
+  previewImport: (rows: Array<{
+    sku: string;
+    name: string;
+    brand?: string;
+    costUsd: number;
+    marginPercent: number;
+    stock?: number;
+  }>) =>
+    apiFetch<{
+      originalRows: number;
+      mergedRows: number;
+      toCreate: number;
+      toUpdate: number;
+      rows: Array<{
+        sku: string;
+        name: string;
+        action: 'CREATE' | 'UPDATE';
+        stockToAdd: number;
+        currentStock: number;
+        stockAfter: number;
+        currentName: string | null;
+        costUsd: number;
+        marginPercent: number;
+      }>;
+    }>('/products/import/preview', { method: 'POST', body: JSON.stringify({ rows }) }),
+
   importBulk: (rows: Array<{
     sku: string;
     barcode?: string;

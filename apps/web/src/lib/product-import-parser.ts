@@ -1,5 +1,13 @@
 import * as XLSX from 'xlsx';
 
+export function normalizeSku(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Number.isInteger(value) ? String(value) : String(value);
+  }
+  return String(value).trim();
+}
+
 export interface ProductImportRow {
   sku: string;
   barcode?: string;
@@ -83,7 +91,7 @@ function rowFromColumns(cols: string[], header: string[]): ProductImportRow | nu
   const iMargin = headerIndex(header, ['utilidad', 'margen', 'margin', 'ganancia']);
   const iStock = headerIndex(header, ['stock', 'cantidad', 'qty', 'existencia']);
 
-  const sku = (cols[iSku >= 0 ? iSku : 0] ?? '').trim();
+  const sku = normalizeSku(cols[iSku >= 0 ? iSku : 0]);
   const name = (cols[iName >= 0 ? iName : 1] ?? sku).trim();
   if (!sku || !name) return null;
 
@@ -115,7 +123,7 @@ function rowFromObject(obj: Record<string, unknown>): ProductImportRow | null {
     return entry?.[1];
   };
 
-  const sku = String(get(['codigo', 'código', 'sku', 'code']) ?? '').trim();
+  const sku = normalizeSku(get(['codigo', 'código', 'sku', 'code']));
   const name = String(get(['descripcion', 'descripción', 'nombre', 'name']) ?? sku).trim();
   if (!sku || !name) return null;
 

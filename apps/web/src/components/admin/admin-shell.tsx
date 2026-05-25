@@ -15,6 +15,7 @@ import {
   Printer,
   ClipboardList,
   BarChart3,
+  FileText,
   Users,
   UserCircle,
   LogOut,
@@ -27,7 +28,8 @@ const navGroups = [
   {
     label: 'Resumen',
     items: [
-      { href: '/dashboard', label: 'Informes', icon: LayoutDashboard },
+      { href: '/dashboard', label: 'Tablero', icon: LayoutDashboard },
+      { href: '/admin/informes', label: 'Informes', icon: FileText },
       { href: '/sales', label: 'Ventas', icon: Receipt },
       { href: '/admin/clientes', label: 'Clientes', icon: UserCircle },
       { href: '/admin/pagos', label: 'Historial pagos', icon: History },
