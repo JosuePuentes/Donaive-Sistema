@@ -2,7 +2,13 @@
 
 import { useState } from 'react';
 import { Download, FileText, Printer } from 'lucide-react';
-import { reportsApi } from '@/lib/reports-api';
+import {
+  fetchBancosExport,
+  fetchClientesExport,
+  fetchMovimientosExport,
+  fetchPlanificacionExport,
+  fetchVentasExport,
+} from '@/lib/reports-export-fallback';
 import { downloadCsv, printReportHtml } from '@/lib/export-csv';
 
 type ReportId =
@@ -49,7 +55,7 @@ export default function InformesPage() {
     setError('');
     try {
       if (id === 'ventas') {
-        const data = await reportsApi.exportVentas(range.from, range.to);
+        const data = await fetchVentasExport(range.from, range.to);
         const headers = ['fecha', 'factura', 'cliente', 'codigo', 'descripcion', 'marca', 'cantidad', 'totalUsd', 'totalVes'];
         const rows = data.rows.map((r) => headers.map((h) => r[h] ?? ''));
         if (format === 'csv') {
@@ -58,13 +64,13 @@ export default function InformesPage() {
           printReportHtml(`Ventas ${range.from} — ${range.to}`, rowsToTable(data.rows));
         }
       } else if (id === 'clientes') {
-        const data = await reportsApi.exportClientes();
+        const data = await fetchClientesExport();
         const headers = ['rif', 'nombre', 'telefono', 'email', 'limiteCreditoUsd'];
         const rows = data.rows.map((r) => headers.map((h) => r[h] ?? ''));
         if (format === 'csv') downloadCsv('clientes.csv', headers, rows);
         else printReportHtml('Informe de clientes', rowsToTable(data.rows));
       } else if (id === 'movimientos') {
-        const data = await reportsApi.exportMovimientos(range.from, range.to);
+        const data = await fetchMovimientosExport(range.from, range.to);
         const headers = Object.keys(data.rows[0] ?? { fecha: '' });
         const rows = data.rows.map((r) => headers.map((h) => r[h] ?? ''));
         if (format === 'csv') {
@@ -73,13 +79,13 @@ export default function InformesPage() {
           printReportHtml(`Movimientos ${range.from} — ${range.to}`, rowsToTable(data.rows));
         }
       } else if (id === 'planificacion') {
-        const data = await reportsApi.exportPlanificacion(coverageDays);
+        const data = await fetchPlanificacionExport(coverageDays);
         const headers = Object.keys(data.rows[0] ?? { codigo: '' });
         const rows = data.rows.map((r) => headers.map((h) => r[h] ?? ''));
         if (format === 'csv') downloadCsv(`planificacion_compra_${coverageDays}d.csv`, headers, rows);
         else printReportHtml(`Planificación de compra (${coverageDays} días)`, rowsToTable(data.rows));
       } else if (id === 'bancos') {
-        const data = await reportsApi.exportBancos();
+        const data = await fetchBancosExport();
         const allRows: Array<Record<string, string | number>> = [
           ...data.bancos.map((r) => ({ tipo: 'Banco', ...r })),
           ...data.cuentas.map((r) => ({ tipo: 'Cuenta', ...r })),

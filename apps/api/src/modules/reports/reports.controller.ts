@@ -18,6 +18,70 @@ export class ReportsController {
     return parsed;
   }
 
+  @Get('ventas-export')
+  @RequirePermissions('REPORTS_EXPORT', 'REPORTS_SALES_BOOK')
+  exportVentasAlias(@Query('from') from?: string, @Query('to') to?: string) {
+    const range = this.reportsService.parseDateRange(from, to);
+    return this.reportsService.exportVentasGeneral(range.from, range.to);
+  }
+
+  @Get('export/ventas')
+  @RequirePermissions('REPORTS_EXPORT', 'REPORTS_SALES_BOOK')
+  exportVentas(@Query('from') from?: string, @Query('to') to?: string) {
+    const range = this.reportsService.parseDateRange(from, to);
+    return this.reportsService.exportVentasGeneral(range.from, range.to);
+  }
+
+  @Get('export/clientes')
+  @RequirePermissions('REPORTS_EXPORT')
+  exportClientes() {
+    return this.reportsService.exportClientes();
+  }
+
+  @Get('clientes-export')
+  @RequirePermissions('REPORTS_EXPORT')
+  exportClientesAlias() {
+    return this.reportsService.exportClientes();
+  }
+
+  @Get('export/movimientos')
+  @RequirePermissions('REPORTS_EXPORT', 'REPORTS_INVENTORY_ANALYSIS')
+  exportMovimientos(@Query('from') from?: string, @Query('to') to?: string) {
+    const range = this.reportsService.parseDateRange(from, to);
+    return this.reportsService.exportMovimientosUnidades(range.from, range.to);
+  }
+
+  @Get('movimientos-export')
+  @RequirePermissions('REPORTS_EXPORT', 'REPORTS_INVENTORY_ANALYSIS')
+  exportMovimientosAlias(@Query('from') from?: string, @Query('to') to?: string) {
+    const range = this.reportsService.parseDateRange(from, to);
+    return this.reportsService.exportMovimientosUnidades(range.from, range.to);
+  }
+
+  @Get('export/planificacion-compra')
+  @RequirePermissions('REPORTS_EXPORT', 'REPORTS_INVENTORY_ANALYSIS')
+  exportPlanificacion(@Query('coverageDays') coverageDays?: string) {
+    return this.reportsService.exportPlanificacionCompra(this.parseCoverageDays(coverageDays));
+  }
+
+  @Get('planificacion-compra-export')
+  @RequirePermissions('REPORTS_EXPORT', 'REPORTS_INVENTORY_ANALYSIS')
+  exportPlanificacionAlias(@Query('coverageDays') coverageDays?: string) {
+    return this.reportsService.exportPlanificacionCompra(this.parseCoverageDays(coverageDays));
+  }
+
+  @Get('export/bancos')
+  @RequirePermissions('REPORTS_EXPORT', 'BANKS_VIEW')
+  exportBancos() {
+    return this.reportsService.exportBancos();
+  }
+
+  @Get('bancos-export')
+  @RequirePermissions('REPORTS_EXPORT', 'BANKS_VIEW')
+  exportBancosAlias() {
+    return this.reportsService.exportBancos();
+  }
+
   @Get('dashboard')
   @RequirePermissions('REPORTS_DAILY_SALES', 'REPORTS_SALES_BOOK', 'REPORTS_INVENTORY_ANALYSIS', 'REPORTS_CASH_FLOW')
   getDashboard() {
@@ -56,37 +120,5 @@ export class ReportsController {
   @RequirePermissions('REPORTS_CASH_FLOW')
   getFlujoCaja(@Query('days') days?: string) {
     return this.reportsService.getFlujoCajaProyectado(this.parseDays(days, 90));
-  }
-
-  @Get('export/ventas')
-  @RequirePermissions('REPORTS_EXPORT', 'REPORTS_SALES_BOOK')
-  exportVentas(@Query('from') from?: string, @Query('to') to?: string) {
-    const range = this.reportsService.parseDateRange(from, to);
-    return this.reportsService.exportVentasGeneral(range.from, range.to);
-  }
-
-  @Get('export/clientes')
-  @RequirePermissions('REPORTS_EXPORT')
-  exportClientes() {
-    return this.reportsService.exportClientes();
-  }
-
-  @Get('export/movimientos')
-  @RequirePermissions('REPORTS_EXPORT', 'REPORTS_INVENTORY_ANALYSIS')
-  exportMovimientos(@Query('from') from?: string, @Query('to') to?: string) {
-    const range = this.reportsService.parseDateRange(from, to);
-    return this.reportsService.exportMovimientosUnidades(range.from, range.to);
-  }
-
-  @Get('export/planificacion-compra')
-  @RequirePermissions('REPORTS_EXPORT', 'REPORTS_INVENTORY_ANALYSIS')
-  exportPlanificacion(@Query('coverageDays') coverageDays?: string) {
-    return this.reportsService.exportPlanificacionCompra(this.parseCoverageDays(coverageDays));
-  }
-
-  @Get('export/bancos')
-  @RequirePermissions('REPORTS_EXPORT', 'BANKS_VIEW')
-  exportBancos() {
-    return this.reportsService.exportBancos();
   }
 }

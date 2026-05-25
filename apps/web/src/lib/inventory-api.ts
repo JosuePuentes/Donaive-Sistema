@@ -110,7 +110,7 @@ export const productsApi = {
 };
 
 export const inventoryApi = {
-  movements: (params?: Record<string, string | number>) => {
+  movements: (params?: Record<string, string | number | boolean>) => {
     const query = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([k, v]) => {

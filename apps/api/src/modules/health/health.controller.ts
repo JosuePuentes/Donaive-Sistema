@@ -6,8 +6,14 @@ export class HealthController {
   check() {
     return {
       status: 'ok',
-      service: 'Ferretería Los Puentes API',
+      service: 'Donaive API',
       timestamp: new Date().toISOString(),
+      build: process.env.RENDER_GIT_COMMIT ?? process.env.BUILD_ID ?? 'local',
+      features: [
+        'reports-export',
+        'products-import-preview',
+        'users-roles',
+      ],
     };
   }
 }

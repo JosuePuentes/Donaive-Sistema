@@ -6,6 +6,7 @@ import {
   ValidateNested,
   IsNumber,
   Min,
+  Max,
   ArrayMinSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -37,6 +38,8 @@ export class ListMovementsQueryDto {
 
   @IsOptional()
   @Type(() => Number)
+  @Min(1)
+  @Max(2000)
   limit?: number = 50;
 }
 
