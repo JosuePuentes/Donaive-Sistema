@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { DocumentType, type Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreatePosSaleDto } from './dto/pos-sale.dto';
 import { TransactionFreezeService } from '../../common/services/transaction-freeze.service';
@@ -33,9 +33,9 @@ export class SalesService {
     startOfDay.setHours(0, 0, 0, 0);
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const invoiceFilter = {
-      status: 'CONFIRMED' as const,
-      documentType: { in: ['INVOICE', 'POS_SALE'] as const },
+    const invoiceFilter: Prisma.InvoiceWhereInput = {
+      status: 'CONFIRMED',
+      documentType: { in: [DocumentType.INVOICE, DocumentType.POS_SALE] },
     };
 
     const [diaPagos, mesPagos, mesFacturas] = await Promise.all([
@@ -57,11 +57,11 @@ export class SalesService {
     ]);
 
     return {
-      ventasDiaUsd: roundCurrency(Number(diaPagos._sum.amountUsd ?? 0), BASE_CURRENCY),
+      ventasDiaUsd: roundCurrency(Number(diaPagos._sum?.amountUsd ?? 0), BASE_CURRENCY),
       ventasDiaTransacciones: diaPagos._count,
-      ventasMesCobradoUsd: roundCurrency(Number(mesPagos._sum.amountUsd ?? 0), BASE_CURRENCY),
-      ventasMesFacturadoUsd: roundCurrency(Number(mesFacturas._sum.totalUsd ?? 0), BASE_CURRENCY),
-      ventasMesVes: roundCurrency(Number(mesFacturas._sum.totalVes ?? 0), TRANSACTION_CURRENCY),
+      ventasMesCobradoUsd: roundCurrency(Number(mesPagos._sum?.amountUsd ?? 0), BASE_CURRENCY),
+      ventasMesFacturadoUsd: roundCurrency(Number(mesFacturas._sum?.totalUsd ?? 0), BASE_CURRENCY),
+      ventasMesVes: roundCurrency(Number(mesFacturas._sum?.totalVes ?? 0), TRANSACTION_CURRENCY),
       ventasMesTransacciones: mesFacturas._count,
       tasaBcvActual: await this.transactionFreeze.getTasaBcvMomento(),
     };
@@ -69,7 +69,10 @@ export class SalesService {
 
   findRecentSales() {
     return this.prisma.invoice.findMany({
-      where: { documentType: { in: ['INVOICE', 'POS_SALE'] }, status: 'CONFIRMED' },
+      where: {
+        documentType: { in: [DocumentType.INVOICE, DocumentType.POS_SALE] },
+        status: 'CONFIRMED',
+      },
       select: {
         id: true,
         number: true,
@@ -254,12 +257,7 @@ export class SalesService {
           },
         });
 
-        await this.treasuryService.recordMovement(
-          tx,
-          payment.paymentMethodId,
-          payment.amount,
-          method,
-        );
+        await this.treasuryService.recordMovement(tx, payment.paymentMethodId, payment.amount);
       }
 
       if (dto.change && dto.change.amount > 0) {
@@ -287,7 +285,6 @@ export class SalesService {
           tx,
           dto.change.paymentMethodId,
           -dto.change.amount,
-          changeMethod,
         );
       }
 

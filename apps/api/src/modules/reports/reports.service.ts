@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { DocumentType, type Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
   calculateDemandPlanning,
@@ -39,13 +40,19 @@ export class ReportsService {
     const endOfWeek = new Date(now);
     endOfWeek.setDate(endOfWeek.getDate() + 7);
 
-    const salesBase = {
-      status: 'CONFIRMED' as const,
-      documentType: { in: ['INVOICE', 'POS_SALE'] as const },
+    const salesBase: Prisma.InvoiceWhereInput = {
+      status: 'CONFIRMED',
+      documentType: { in: [DocumentType.INVOICE, DocumentType.POS_SALE] },
     };
 
-    const monthWhere = { ...salesBase, confirmedAt: { gte: startOfMonth } };
-    const dayWhere = { ...salesBase, confirmedAt: { gte: startOfDay } };
+    const monthWhere: Prisma.InvoiceWhereInput = {
+      ...salesBase,
+      confirmedAt: { gte: startOfMonth },
+    };
+    const dayWhere: Prisma.InvoiceWhereInput = {
+      ...salesBase,
+      confirmedAt: { gte: startOfDay },
+    };
 
     const [monthTotals, dayPayments, monthDetails, lowStockCount, cxpWeek, bankBalances, tasaBcv] =
       await Promise.all([
@@ -79,8 +86,8 @@ export class ReportsService {
         this.transactionFreeze.getTasaBcvMomento(),
       ]);
 
-    let ventasMesUsd = Number(monthTotals._sum.totalUsd ?? 0);
-    let ventasMesVes = Number(monthTotals._sum.totalVes ?? 0);
+    let ventasMesUsd = Number(monthTotals._sum?.totalUsd ?? 0);
+    let ventasMesVes = Number(monthTotals._sum?.totalVes ?? 0);
     let utilidadMesUsd = 0;
 
     for (const d of monthDetails) {
@@ -93,7 +100,7 @@ export class ReportsService {
 
     ventasMesUsd = roundCurrency(ventasMesUsd, BASE_CURRENCY);
     utilidadMesUsd = roundCurrency(utilidadMesUsd, BASE_CURRENCY);
-    const ventasDiaUsd = roundCurrency(Number(dayPayments._sum.amountUsd ?? 0), BASE_CURRENCY);
+    const ventasDiaUsd = roundCurrency(Number(dayPayments._sum?.amountUsd ?? 0), BASE_CURRENCY);
 
     return {
       kpis: {
@@ -853,6 +860,13 @@ export class ReportsService {
       this.prisma.paymentMethod.findMany({
         where: { isActive: true },
         orderBy: { sortOrder: 'asc' },
+        select: {
+          code: true,
+          name: true,
+          type: true,
+          currency: true,
+          balance: true,
+        },
       }),
       this.prisma.bankAccount.findMany({
         where: { isActive: true },

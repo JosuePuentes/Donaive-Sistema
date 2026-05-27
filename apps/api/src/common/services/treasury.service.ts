@@ -16,7 +16,7 @@ export class TreasuryService {
       id: string;
       name: string;
       currency: string;
-      balance: { toString(): string } | number;
+      balance?: { toString(): string } | number;
       bankAccountId: string | null;
       isActive: boolean;
     },
