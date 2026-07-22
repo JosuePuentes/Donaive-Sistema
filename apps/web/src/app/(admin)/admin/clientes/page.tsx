@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 import { customerDisplayName } from '@/lib/customer-display';
 
@@ -32,10 +32,18 @@ export default function ClientesPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     const q = searchDebounced ? `?search=${encodeURIComponent(searchDebounced)}` : '';
-    apiFetch<Customer[]>(`/customers${q}`).then(setCustomers).catch(() => {});
+    try {
+      setCustomers(await apiFetch<Customer[]>(`/customers${q}`));
+    } catch {
+      setCustomers([]);
+    }
   }, [searchDebounced]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -52,7 +60,7 @@ export default function ClientesPage() {
       });
       setShowForm(false);
       setForm({ rif: '', businessName: '', firstName: '', lastName: '', phone: '' });
-      load();
+      await load();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error');
     }

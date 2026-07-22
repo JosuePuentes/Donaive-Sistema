@@ -245,16 +245,15 @@ export default function DashboardContent() {
             <SelectField
               label=""
               value={String(daysRange)}
-              onChange={(v) => setDaysRange(Number(v))}
-              options={[
-                { value: '7', label: '7 días' },
-                { value: '30', label: '30 días' },
-                { value: '90', label: '90 días' },
-              ]}
-            />
+              onChange={(e) => setDaysRange(Number(e.target.value))}
+            >
+              <option value="7">7 días</option>
+              <option value="30">30 días</option>
+              <option value="90">90 días</option>
+            </SelectField>
           </CardHeader>
           <CardContent>
-            {ventas ? <VentasChart data={ventas} /> : <div className="h-72 text-sm text-slate-400">Cargando…</div>}
+            {ventas ? <VentasChart ventas={ventas} /> : <div className="h-72 text-sm text-slate-400">Cargando…</div>}
           </CardContent>
         </Card>
 
@@ -264,17 +263,16 @@ export default function DashboardContent() {
             <SelectField
               label=""
               value={String(daysRange)}
-              onChange={(v) => setDaysRange(Number(v))}
-              options={[
-                { value: '7', label: '7 días' },
-                { value: '30', label: '30 días' },
-                { value: '90', label: '90 días' },
-              ]}
-            />
+              onChange={(e) => setDaysRange(Number(e.target.value))}
+            >
+              <option value="7">7 días</option>
+              <option value="30">30 días</option>
+              <option value="90">90 días</option>
+            </SelectField>
           </CardHeader>
           <CardContent>
             {metodos ? (
-              <MetodosPagoChart data={metodos} />
+              <MetodosPagoChart metodos={metodos} />
             ) : (
               <div className="h-72 text-sm text-slate-400">Cargando…</div>
             )}
@@ -288,16 +286,15 @@ export default function DashboardContent() {
           <SelectField
             label=""
             value={String(cashFlowDays)}
-            onChange={(v) => setCashFlowDays(Number(v))}
-            options={[
-              { value: '30', label: '30 días' },
-              { value: '90', label: '90 días' },
-              { value: '180', label: '180 días' },
-            ]}
-          />
+            onChange={(e) => setCashFlowDays(Number(e.target.value))}
+          >
+            <option value="30">30 días</option>
+            <option value="90">90 días</option>
+            <option value="180">180 días</option>
+          </SelectField>
         </CardHeader>
         <CardContent>
-          {flujo ? <FlujoCajaChart data={flujo} /> : <div className="h-72 text-sm text-slate-400">Cargando…</div>}
+          {flujo ? <FlujoCajaChart flujo={flujo} /> : <div className="h-72 text-sm text-slate-400">Cargando…</div>}
         </CardContent>
       </Card>
 
