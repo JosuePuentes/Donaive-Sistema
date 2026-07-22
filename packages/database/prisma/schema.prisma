@@ -84,6 +84,10 @@ enum PermissionCode {
   USERS_VIEW
   USERS_MANAGE
   ROLES_MANAGE
+
+  // Sucursales
+  BRANCHES_VIEW
+  BRANCHES_MANAGE
 }
 
 enum CurrencyCode {
@@ -196,6 +200,46 @@ enum LedgerEntryType {
   CREDIT
 }
 
+// ─── SUCURSALES ─────────────────────────────────────────────────────────────
+
+model Branch {
+  id        String   @id @default(cuid())
+  code      String   @unique @db.VarChar(16)
+  name      String   @db.VarChar(120)
+  address   String?
+  phone     String?
+  isActive  Boolean  @default(true) @map("is_active")
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users                User[]
+  branchStocks         BranchStock[]
+  inventoryMovements   InventoryMovement[]
+  inventoryAdjustments InventoryAdjustment[]
+  purchases            Purchase[]
+  invoices             Invoice[]
+  cashRegisterSessions CashRegisterSession[]
+
+  @@index([isActive])
+  @@map("branches")
+}
+
+model BranchStock {
+  id        String  @id @default(cuid())
+  branchId  String  @map("branch_id")
+  productId String  @map("product_id")
+  stock     Decimal @default(0) @db.Decimal(18, 4)
+
+  branch  Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, productId])
+  @@index([branchId])
+  @@index([productId])
+  @@map("branch_stocks")
+}
+
 // ─── RBAC: USUARIOS, ROLES Y PERMISOS ──────────────────────────────────────
 
 model User {
@@ -206,10 +250,12 @@ model User {
   firstName    String     @map("first_name")
   lastName     String     @map("last_name")
   status       UserStatus @default(ACTIVE)
+  branchId     String?    @map("branch_id")
   lastLoginAt  DateTime?  @map("last_login_at")
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
+  branch                 Branch?               @relation(fields: [branchId], references: [id], onDelete: Restrict)
   roles                  UserRole[]
   inventoryMovements     InventoryMovement[]
   inventoryAdjustments   InventoryAdjustment[]
@@ -340,6 +386,7 @@ model Product {
   updatedAt          DateTime    @updatedAt @map("updated_at")
 
   category           ProductCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  branchStocks       BranchStock[]
   inventoryMovements InventoryMovement[]
   inventoryAdjustments InventoryAdjustmentLine[]
   purchaseDetails    PurchaseDetail[]
@@ -356,6 +403,7 @@ model Product {
 
 model InventoryMovement {
   id              String                @id @default(cuid())
+  branchId        String?               @map("branch_id")
   productId       String                @map("product_id")
   movementType    InventoryMovementType @map("movement_type")
   quantity        Decimal               @db.Decimal(18, 4)
@@ -373,9 +421,11 @@ model InventoryMovement {
   createdById     String                @map("created_by_id")
   createdAt       DateTime              @default(now()) @map("created_at")
 
+  branch    Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
   product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
   createdBy User    @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
+  @@index([branchId, productId, createdAt(sort: Desc)])
   @@index([productId, createdAt(sort: Desc)])
   @@index([referenceType, referenceId])
   @@map("inventory_movements")
@@ -384,12 +434,14 @@ model InventoryMovement {
 model InventoryAdjustment {
   id          String                    @id @default(cuid())
   number      String                    @unique
+  branchId    String?                   @map("branch_id")
   reason      InventoryAdjustmentReason
   notes       String?
   status      DocumentStatus            @default(CONFIRMED)
   createdById String                    @map("created_by_id")
   createdAt   DateTime                  @default(now()) @map("created_at")
 
+  branch    Branch?                   @relation(fields: [branchId], references: [id], onDelete: Restrict)
   createdBy User                      @relation(fields: [createdById], references: [id], onDelete: Restrict)
   lines     InventoryAdjustmentLine[]
 
@@ -435,6 +487,7 @@ model Supplier {
 model Purchase {
   id              String         @id @default(cuid())
   number          String         @unique
+  branchId        String?        @map("branch_id")
   supplierId      String         @map("supplier_id")
   status          DocumentStatus @default(DRAFT)
   purchaseDate    DateTime       @map("purchase_date") @db.Date
@@ -462,6 +515,7 @@ model Purchase {
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
 
+  branch          Branch?          @relation(fields: [branchId], references: [id], onDelete: Restrict)
   supplier        Supplier         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   createdBy       User             @relation("PurchaseCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   details         PurchaseDetail[]
@@ -516,6 +570,7 @@ model Customer {
 model Invoice {
   id              String         @id @default(cuid())
   number          String         @unique
+  branchId        String?        @map("branch_id")
   documentType    DocumentType   @default(INVOICE) @map("document_type")
   status          DocumentStatus @default(DRAFT)
   customerId      String?        @map("customer_id")
@@ -547,6 +602,7 @@ model Invoice {
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
 
+  branch                Branch?              @relation(fields: [branchId], references: [id], onDelete: Restrict)
   customer              Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
   parentInvoice         Invoice?             @relation("InvoiceAdjustments", fields: [parentInvoiceId], references: [id], onDelete: SetNull)
   childDocuments        Invoice[]            @relation("InvoiceAdjustments")
@@ -650,6 +706,7 @@ model PaymentMethod {
 model CashRegisterSession {
   id              String                    @id @default(cuid())
   sessionNumber   String                    @unique @map("session_number")
+  branchId        String?                   @map("branch_id")
   bankAccountId   String                    @map("bank_account_id")
   openedById      String                    @map("opened_by_id")
   status          CashRegisterSessionStatus @default(OPEN)
@@ -669,6 +726,7 @@ model CashRegisterSession {
   closedAt  DateTime? @map("closed_at")
   notes     String?
 
+  branch      Branch?                 @relation(fields: [branchId], references: [id], onDelete: Restrict)
   bankAccount BankAccount             @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
   openedBy    User                    @relation(fields: [openedById], references: [id], onDelete: Restrict)
   invoices    Invoice[]

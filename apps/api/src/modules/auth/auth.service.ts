@@ -17,6 +17,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
       include: {
+        branch: { select: { id: true, code: true, name: true } },
         roles: {
           include: {
             role: {
@@ -40,6 +41,22 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
+    if (!user.branchId) {
+      const defaultBranch = await this.prisma.branch.findFirst({
+        where: { isActive: true },
+        orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+        select: { id: true, code: true, name: true },
+      });
+      if (defaultBranch) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { branchId: defaultBranch.id },
+        });
+        user.branchId = defaultBranch.id;
+        user.branch = defaultBranch;
+      }
+    }
+
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
@@ -58,6 +75,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
+        branch: { select: { id: true, code: true, name: true } },
         roles: {
           include: {
             role: {
@@ -76,6 +94,22 @@ export class AuthService {
       return null;
     }
 
+    if (!user.branchId) {
+      const defaultBranch = await this.prisma.branch.findFirst({
+        where: { isActive: true },
+        orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+        select: { id: true, code: true, name: true },
+      });
+      if (defaultBranch) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { branchId: defaultBranch.id },
+        });
+        user.branchId = defaultBranch.id;
+        user.branch = defaultBranch;
+      }
+    }
+
     return this.buildAuthenticatedUser(user);
   }
 
@@ -85,6 +119,8 @@ export class AuthService {
     username: string;
     firstName: string;
     lastName: string;
+    branchId: string | null;
+    branch: { id: string; code: string; name: string } | null;
     roles: Array<{
       role: {
         code: string;
@@ -107,6 +143,8 @@ export class AuthService {
       username: user.username,
       firstName: user.firstName,
       lastName: user.lastName,
+      branchId: user.branchId,
+      branch: user.branch,
       roles,
       permissions: Array.from(permissionsSet),
     };

@@ -11,6 +11,7 @@ import {
   BASE_CURRENCY,
 } from '@flp/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { BranchStockService } from '../../common/services/branch-stock.service';
 import { DocumentNumberService } from '../../common/services/document-number.service';
 import {
   ListMovementsQueryDto,
@@ -29,15 +30,20 @@ const INBOUND_TYPES: InventoryMovementType[] = [
 export class InventoryService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly branchStock: BranchStockService,
     private readonly documentNumber: DocumentNumberService,
   ) {}
 
-  async findMovements(query: ListMovementsQueryDto) {
+  async findMovements(query: ListMovementsQueryDto, branchId?: string | null) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 50;
     const skip = (page - 1) * limit;
 
     const where: Prisma.InventoryMovementWhereInput = {};
+
+    if (branchId) {
+      where.branchId = branchId;
+    }
 
     if (query.productId) {
       where.productId = query.productId;
@@ -79,16 +85,21 @@ export class InventoryService {
     };
   }
 
-  async findKardexByProduct(productId: string, query: ListMovementsQueryDto) {
+  async findKardexByProduct(
+    productId: string,
+    query: ListMovementsQueryDto,
+    branchId?: string | null,
+  ) {
     await this.ensureProductExists(productId);
-    return this.findMovements({ ...query, productId });
+    return this.findMovements({ ...query, productId }, branchId);
   }
 
-  async findAdjustments(page = 1, limit = 20) {
+  async findAdjustments(page = 1, limit = 20, branchId?: string | null) {
     const skip = (page - 1) * limit;
 
     const [adjustments, total] = await Promise.all([
       this.prisma.inventoryAdjustment.findMany({
+        where: branchId ? { branchId } : undefined,
         include: {
           createdBy: { select: { id: true, firstName: true, lastName: true } },
           lines: {
@@ -101,7 +112,9 @@ export class InventoryService {
         skip,
         take: limit,
       }),
-      this.prisma.inventoryAdjustment.count(),
+      this.prisma.inventoryAdjustment.count({
+        where: branchId ? { branchId } : undefined,
+      }),
     ]);
 
     return {
@@ -130,7 +143,7 @@ export class InventoryService {
     return adjustment;
   }
 
-  async createAdjustment(dto: CreateAdjustmentDto, userId: string) {
+  async createAdjustment(dto: CreateAdjustmentDto, userId: string, branchId: string) {
     this.validateAdjustmentLines(dto.lines);
 
     const number = await this.documentNumber.generate('AJ', 'adjustment');
@@ -139,6 +152,7 @@ export class InventoryService {
       const adjustment = await tx.inventoryAdjustment.create({
         data: {
           number,
+          branchId,
           reason: dto.reason,
           notes: dto.notes,
           createdById: userId,
@@ -156,6 +170,7 @@ export class InventoryService {
 
       for (const line of dto.lines) {
         await this.processMovement(tx, {
+          branchId,
           productId: line.productId,
           movementType: line.movementType,
           quantity: line.quantity,
@@ -186,7 +201,7 @@ export class InventoryService {
     return this.findAdjustment(adjustmentId);
   }
 
-  async createShrinkage(dto: CreateShrinkageDto, userId: string) {
+  async createShrinkage(dto: CreateShrinkageDto, userId: string, branchId: string) {
     const shrinkageReasons = ['DAMAGE', 'THEFT', 'EXPIRATION', 'OTHER'];
     if (!shrinkageReasons.includes(dto.reason)) {
       throw new BadRequestException(
@@ -207,6 +222,7 @@ export class InventoryService {
       const adjustment = await tx.inventoryAdjustment.create({
         data: {
           number,
+          branchId,
           reason: dto.reason,
           notes: dto.notes,
           createdById: userId,
@@ -224,6 +240,7 @@ export class InventoryService {
 
       for (const line of lines) {
         await this.processMovement(tx, {
+          branchId,
           productId: line.productId,
           movementType: line.movementType,
           quantity: line.quantity,
@@ -255,6 +272,7 @@ export class InventoryService {
 
   /** API pública para compras, ventas y POS — registra movimiento y actualiza stock */
   async registerMovement(params: {
+    branchId: string;
     productId: string;
     movementType: InventoryMovementType;
     quantity: number;
@@ -272,6 +290,7 @@ export class InventoryService {
   async registerMovementInTx(
     tx: Prisma.TransactionClient,
     params: {
+      branchId: string;
       productId: string;
       movementType: InventoryMovementType;
       quantity: number;
@@ -286,7 +305,48 @@ export class InventoryService {
     return this.processMovement(tx, params);
   }
 
-  async getStockSummary() {
+  async getStockSummary(branchId?: string | null) {
+    if (branchId) {
+      const rows = await this.prisma.branchStock.findMany({
+        where: { branchId, product: { isActive: true } },
+        include: {
+          product: {
+            select: {
+              id: true,
+              sku: true,
+              name: true,
+              minStock: true,
+              maxStock: true,
+              unit: true,
+            },
+          },
+        },
+        orderBy: { stock: 'asc' },
+        take: 500,
+      });
+
+      const mapped = rows.map((row) => {
+        const stock = Number(row.stock);
+        const minStock = Number(row.product.minStock);
+        return {
+          id: row.product.id,
+          sku: row.product.sku,
+          name: row.product.name,
+          stock,
+          minStock,
+          maxStock: row.product.maxStock ? Number(row.product.maxStock) : null,
+          unit: row.product.unit,
+          isBelowMinStock: stock <= minStock,
+        };
+      });
+
+      return {
+        totalProducts: mapped.length,
+        lowStockCount: mapped.filter((p) => p.isBelowMinStock).length,
+        products: mapped,
+      };
+    }
+
     const products = await this.prisma.product.findMany({
       where: { isActive: true },
       select: {
@@ -326,6 +386,7 @@ export class InventoryService {
   private async processMovement(
     tx: Prisma.TransactionClient,
     params: {
+      branchId: string;
       productId: string;
       movementType: InventoryMovementType;
       quantity: number;
@@ -346,7 +407,11 @@ export class InventoryService {
     }
 
     const isInbound = INBOUND_TYPES.includes(params.movementType);
-    const currentStock = Number(product.stock);
+    const currentStock = await this.branchStock.getStock(
+      params.branchId,
+      params.productId,
+      tx,
+    );
 
     if (!isInbound) {
       const validation = validateStockAvailability({
@@ -376,6 +441,7 @@ export class InventoryService {
 
     await tx.inventoryMovement.create({
       data: {
+        branchId: params.branchId,
         productId: params.productId,
         movementType: params.movementType,
         quantity: params.quantity,
@@ -392,10 +458,12 @@ export class InventoryService {
       },
     });
 
-    await tx.product.update({
-      where: { id: params.productId },
-      data: { stock: stockAfter },
-    });
+    await this.branchStock.setStock(
+      params.branchId,
+      params.productId,
+      stockAfter,
+      tx,
+    );
 
     return stockAfter;
   }

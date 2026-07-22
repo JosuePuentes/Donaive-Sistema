@@ -10,6 +10,7 @@ import { CreatePurchaseDto } from './dto/purchase.dto';
 import { TransactionFreezeService } from '../../common/services/transaction-freeze.service';
 import { TreasuryService } from '../../common/services/treasury.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { BranchStockService } from '../../common/services/branch-stock.service';
 import type { Prisma } from '@prisma/client';
 import {
   calculateWeightedAverageCost,
@@ -25,6 +26,7 @@ export class PurchasesService {
     private readonly transactionFreeze: TransactionFreezeService,
     private readonly inventoryService: InventoryService,
     private readonly treasuryService: TreasuryService,
+    private readonly branchStock: BranchStockService,
   ) {}
 
   findAllSuppliers(includeInactive = false) {
@@ -51,8 +53,9 @@ export class PurchasesService {
     return this.prisma.supplier.update({ where: { id }, data: dto });
   }
 
-  findAllPurchases() {
+  findAllPurchases(branchId?: string | null) {
     return this.prisma.purchase.findMany({
+      where: branchId ? { branchId } : undefined,
       include: {
         supplier: { select: { id: true, businessName: true, rif: true } },
         details: { include: { product: { select: { id: true, sku: true, name: true } } } },
@@ -88,7 +91,7 @@ export class PurchasesService {
     return purchase;
   }
 
-  async createAndConfirmPurchase(dto: CreatePurchaseDto, userId: string) {
+  async createAndConfirmPurchase(dto: CreatePurchaseDto, userId: string, branchId: string) {
     await this.ensureSupplier(dto.supplierId);
 
     if (dto.isCredit) {
@@ -163,6 +166,7 @@ export class PurchasesService {
       const purchase = await tx.purchase.create({
         data: {
           number,
+          branchId,
           supplierId: dto.supplierId,
           status: 'CONFIRMED',
           purchaseDate: new Date(dto.purchaseDate),
@@ -199,8 +203,9 @@ export class PurchasesService {
         { stock: number; costUsd: number; marginPercent: number }
       >();
       for (const p of products) {
+        const branchStock = await this.branchStock.getStock(branchId, p.id, tx);
         runningProduct.set(p.id, {
-          stock: Number(p.stock),
+          stock: branchStock,
           costUsd: Number(p.costUsd),
           marginPercent: Number(p.marginPercent),
         });
@@ -237,6 +242,7 @@ export class PurchasesService {
         });
 
         await this.inventoryService.registerMovementInTx(tx, {
+          branchId,
           productId: line.productId,
           movementType: 'PURCHASE_IN',
           quantity: line.quantity,

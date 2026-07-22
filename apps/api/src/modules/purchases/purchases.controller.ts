@@ -7,11 +7,15 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
+import { BranchStockService } from '../../common/services/branch-stock.service';
 
 @Controller()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class PurchasesController {
-  constructor(private readonly purchasesService: PurchasesService) {}
+  constructor(
+    private readonly purchasesService: PurchasesService,
+    private readonly branchStock: BranchStockService,
+  ) {}
 
   @Get('suppliers')
   @RequirePermissions('SUPPLIERS_VIEW', 'PURCHASES_CREATE')
@@ -39,8 +43,8 @@ export class PurchasesController {
 
   @Get('purchases')
   @RequirePermissions('PURCHASES_VIEW')
-  findAllPurchases() {
-    return this.purchasesService.findAllPurchases();
+  findAllPurchases(@CurrentUser() user: AuthenticatedUser) {
+    return this.purchasesService.findAllPurchases(user.branchId);
   }
 
   @Get('purchases/:id')
@@ -52,6 +56,7 @@ export class PurchasesController {
   @Post('purchases')
   @RequirePermissions('PURCHASES_CREATE')
   createPurchase(@Body() dto: CreatePurchaseDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.purchasesService.createAndConfirmPurchase(dto, user.id);
+    const branchId = this.branchStock.requireBranchId(user.branchId);
+    return this.purchasesService.createAndConfirmPurchase(dto, user.id, branchId);
   }
 }

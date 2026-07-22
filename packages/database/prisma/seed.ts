@@ -51,6 +51,8 @@ const PERMISSION_DEFINITIONS: Array<{
   { code: 'USERS_VIEW', module: 'Usuarios', description: 'Ver usuarios' },
   { code: 'USERS_MANAGE', module: 'Usuarios', description: 'Administrar usuarios' },
   { code: 'ROLES_MANAGE', module: 'Usuarios', description: 'Administrar roles y permisos' },
+  { code: 'BRANCHES_VIEW', module: 'Sucursales', description: 'Ver sucursales' },
+  { code: 'BRANCHES_MANAGE', module: 'Sucursales', description: 'Administrar sucursales' },
 ];
 
 const ROLE_DEFINITIONS: Array<{
@@ -128,13 +130,45 @@ async function main() {
   }
   console.log(`✅ ${ROLE_DEFINITIONS.length} roles creados con permisos`);
 
+  // Sucursal principal
+  const mainBranch = await prisma.branch.upsert({
+    where: { code: 'MAIN' },
+    update: { name: 'Sucursal Principal', isDefault: true, isActive: true },
+    create: {
+      code: 'MAIN',
+      name: 'Sucursal Principal',
+      address: 'Av. Principal, Los Puentes',
+      isDefault: true,
+      isActive: true,
+    },
+  });
+  console.log(`✅ Sucursal principal: ${mainBranch.name}`);
+
+  const products = await prisma.product.findMany({ select: { id: true, stock: true } });
+  if (products.length > 0) {
+    for (const product of products) {
+      await prisma.branchStock.upsert({
+        where: {
+          branchId_productId: { branchId: mainBranch.id, productId: product.id },
+        },
+        update: {},
+        create: {
+          branchId: mainBranch.id,
+          productId: product.id,
+          stock: product.stock,
+        },
+      });
+    }
+    console.log(`✅ Stock migrado a sucursal principal (${products.length} productos)`);
+  }
+
   // Usuario administrador por defecto
   const adminRole = await prisma.role.findUniqueOrThrow({ where: { code: 'ADMIN' } });
   const passwordHash = await bcrypt.hash('Admin123!', 12);
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@ferreterialospuentes.com' },
-    update: {},
+    update: { branchId: mainBranch.id },
     create: {
       email: 'admin@ferreterialospuentes.com',
       username: 'admin',
@@ -142,10 +176,16 @@ async function main() {
       firstName: 'Administrador',
       lastName: 'Sistema',
       status: 'ACTIVE',
+      branchId: mainBranch.id,
       roles: { create: [{ roleId: adminRole.id }] },
     },
   });
   console.log(`✅ Usuario admin creado: ${admin.email} / Admin123!`);
+
+  await prisma.user.updateMany({
+    where: { branchId: null },
+    data: { branchId: mainBranch.id },
+  });
 
   // Tasa BCV inicial
   const today = new Date();

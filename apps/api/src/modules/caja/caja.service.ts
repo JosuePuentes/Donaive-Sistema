@@ -52,7 +52,7 @@ export class CajaService {
     });
   }
 
-  async apertura(dto: AperturaCajaDto, userId: string) {
+  async apertura(dto: AperturaCajaDto, userId: string, branchId: string) {
     const existing = await this.getOpenSessionForUser(userId);
     if (existing) {
       throw new ConflictException(
@@ -67,6 +67,7 @@ export class CajaService {
     const session = await this.prisma.cashRegisterSession.create({
       data: {
         sessionNumber,
+        branchId,
         bankAccountId,
         openedById: userId,
         status: 'OPEN',

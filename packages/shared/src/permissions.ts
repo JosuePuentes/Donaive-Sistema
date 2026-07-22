@@ -52,6 +52,9 @@ export const PERMISSIONS = {
   USERS_VIEW: 'USERS_VIEW',
   USERS_MANAGE: 'USERS_MANAGE',
   ROLES_MANAGE: 'ROLES_MANAGE',
+
+  BRANCHES_VIEW: 'BRANCHES_VIEW',
+  BRANCHES_MANAGE: 'BRANCHES_MANAGE',
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

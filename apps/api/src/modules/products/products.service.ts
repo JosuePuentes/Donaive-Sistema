@@ -13,6 +13,7 @@ import {
 } from '@flp/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { DualCurrencyService } from '../../common/services/dual-currency.service';
+import { BranchStockService } from '../../common/services/branch-stock.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ListProductsQueryDto } from './dto/list-products.dto';
@@ -25,11 +26,12 @@ export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly dualCurrency: DualCurrencyService,
+    private readonly branchStock: BranchStockService,
   ) {}
 
-  async findAll(query: ListProductsQueryDto) {
+  async findAll(query: ListProductsQueryDto, branchId?: string | null) {
     const page = query.page ?? 1;
-    const limit = Math.min(query.limit ?? 20, 100);
+    const limit = Math.min(query.limit ?? 20, 500);
     const skip = (page - 1) * limit;
 
     const where: Prisma.ProductWhereInput = {};
@@ -52,7 +54,7 @@ export class ProductsService {
     }
 
     if (query.lowStock) {
-      return this.findLowStockPaginated({ page, limit, search: query.search });
+      return this.findLowStockPaginated({ page, limit, search: query.search, branchId });
     }
 
     const [products, total] = await Promise.all([
@@ -66,9 +68,11 @@ export class ProductsService {
       this.prisma.product.count({ where }),
     ]);
 
-    const data = await this.dualCurrency.enrichProducts(
+    const data = await this.enrichWithBranchStock(
       products.map((p) => this.mapProduct(p)),
+      branchId,
     );
+    const withCurrency = await this.dualCurrency.enrichProducts(data);
 
     return {
       data,
@@ -85,8 +89,9 @@ export class ProductsService {
     page: number;
     limit: number;
     search?: string;
+    branchId?: string | null;
   }) {
-    const { page, limit, search } = opts;
+    const { page, limit, search, branchId } = opts;
     const skip = (page - 1) * limit;
     const searchPattern = search ? `%${search}%` : null;
 
@@ -153,7 +158,7 @@ export class ProductsService {
     };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, branchId?: string | null) {
     const product = await this.prisma.product.findUnique({
       where: { id },
       include: { category: { select: { id: true, name: true } } },
@@ -163,10 +168,11 @@ export class ProductsService {
       throw new NotFoundException(`Producto ${id} no encontrado`);
     }
 
-    return this.dualCurrency.enrichProduct(this.mapProduct(product));
+    const [mapped] = await this.enrichWithBranchStock([this.mapProduct(product)], branchId);
+    return this.dualCurrency.enrichProduct(mapped);
   }
 
-  async findByBarcode(barcode: string) {
+  async findByBarcode(barcode: string, branchId?: string | null) {
     const product = await this.prisma.product.findUnique({
       where: { barcode },
       include: { category: { select: { id: true, name: true } } },
@@ -176,10 +182,11 @@ export class ProductsService {
       throw new NotFoundException(`Producto con código ${barcode} no encontrado`);
     }
 
-    return this.dualCurrency.enrichProduct(this.mapProduct(product));
+    const [mapped] = await this.enrichWithBranchStock([this.mapProduct(product)], branchId);
+    return this.dualCurrency.enrichProduct(mapped);
   }
 
-  async create(dto: CreateProductDto, userId: string) {
+  async create(dto: CreateProductDto, userId: string, branchId: string) {
     await this.validateUniqueSkuBarcode(dto.sku, dto.barcode);
 
     if (dto.categoryId) {
@@ -218,6 +225,7 @@ export class ProductsService {
         const unitCostUsd = roundCurrency(dto.costUsd, BASE_CURRENCY);
         await tx.inventoryMovement.create({
           data: {
+            branchId,
             productId: product.id,
             movementType: 'ADJUSTMENT_IN',
             quantity: initialStock,
@@ -232,9 +240,41 @@ export class ProductsService {
             createdById: userId,
           },
         });
+        await this.branchStock.setStock(branchId, product.id, initialStock, tx);
+
+        const branches = await tx.branch.findMany({
+          where: { isActive: true, NOT: { id: branchId } },
+          select: { id: true },
+        });
+        if (branches.length > 0) {
+          await tx.branchStock.createMany({
+            data: branches.map((b) => ({
+              branchId: b.id,
+              productId: product.id,
+              stock: 0,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      } else {
+        const branches = await tx.branch.findMany({
+          where: { isActive: true },
+          select: { id: true },
+        });
+        if (branches.length > 0) {
+          await tx.branchStock.createMany({
+            data: branches.map((b) => ({
+              branchId: b.id,
+              productId: product.id,
+              stock: 0,
+            })),
+            skipDuplicates: true,
+          });
+        }
       }
 
-      return this.dualCurrency.enrichProduct(this.mapProduct(product));
+      const [mapped] = await this.enrichWithBranchStock([this.mapProduct(product)], branchId);
+      return this.dualCurrency.enrichProduct(mapped);
     });
   }
 
@@ -368,7 +408,7 @@ export class ProductsService {
     };
   }
 
-  async importBulk(rows: ImportProductRowDto[], userId: string) {
+  async importBulk(rows: ImportProductRowDto[], userId: string, branchId: string) {
     const merged = mergeImportRows(
       rows.map((r) => ({ ...r, sku: normalizeImportSku(r.sku) })).filter((r) => r.sku),
     );
@@ -389,7 +429,7 @@ export class ProductsService {
           const addStock = row.stock ?? 0;
 
           await this.prisma.$transaction(async (tx) => {
-            const updated = await tx.product.update({
+            await tx.product.update({
               where: { id: existing.id },
               data: {
                 name: row.name,
@@ -399,21 +439,23 @@ export class ProductsService {
                 costUsd,
                 marginPercent,
                 salePriceUsd,
-                ...(addStock > 0 ? { stock: { increment: addStock } } : {}),
               },
             });
 
             if (addStock > 0) {
+              const currentStock = await this.branchStock.getStock(branchId, existing.id, tx);
+              const stockAfter = currentStock + addStock;
               const unitCostUsd = roundCurrency(costUsd, BASE_CURRENCY);
               await tx.inventoryMovement.create({
                 data: {
+                  branchId,
                   productId: existing.id,
                   movementType: 'ADJUSTMENT_IN',
                   quantity: addStock,
                   unitCostUsd,
                   totalCostUsd: roundCurrency(addStock * unitCostUsd, BASE_CURRENCY),
-                  stockBefore: Number(existing.stock),
-                  stockAfter: Number(updated.stock),
+                  stockBefore: currentStock,
+                  stockAfter,
                   referenceType: 'PRODUCT_IMPORT',
                   referenceId: existing.id,
                   referenceNumber: row.sku,
@@ -421,6 +463,7 @@ export class ProductsService {
                   createdById: userId,
                 },
               });
+              await this.branchStock.setStock(branchId, existing.id, stockAfter, tx);
             }
           });
 
@@ -438,6 +481,7 @@ export class ProductsService {
               initialStock: row.stock ?? 0,
             },
             userId,
+            branchId,
           );
           results.push({ sku: row.sku, ok: true });
         }
@@ -461,6 +505,93 @@ export class ProductsService {
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
+
+  private async enrichWithBranchStock<T extends { id: string; stock: number; minStock: number }>(
+    products: T[],
+    branchId?: string | null,
+  ) {
+    if (!branchId || products.length === 0) return products;
+
+    const stocks = await this.prisma.branchStock.findMany({
+      where: {
+        branchId,
+        productId: { in: products.map((p) => p.id) },
+      },
+    });
+    const stockMap = new Map(stocks.map((s) => [s.productId, Number(s.stock)]));
+
+    return products.map((p) => {
+      const stock = stockMap.get(p.id) ?? 0;
+      return {
+        ...p,
+        stock,
+        isBelowMinStock: isBelowMinStock(stock, p.minStock),
+      };
+    });
+  }
+
+  async searchForPos(search: string, branchId: string, limit = 60) {
+    const where: Prisma.ProductWhereInput = { isActive: true };
+    const q = search.trim();
+    if (q) {
+      where.OR = [
+        { name: { contains: q, mode: 'insensitive' } },
+        { sku: { contains: q, mode: 'insensitive' } },
+        { barcode: { contains: q, mode: 'insensitive' } },
+        { brand: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
+    const [products, branches] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        include: { category: { select: { id: true, name: true } } },
+        orderBy: { name: 'asc' },
+        take: limit,
+      }),
+      this.prisma.branch.findMany({
+        where: { isActive: true },
+        orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+        select: { id: true, code: true, name: true },
+      }),
+    ]);
+
+    if (products.length === 0) {
+      return { data: [], branches };
+    }
+
+    const productIds = products.map((p) => p.id);
+    const branchStocks = await this.prisma.branchStock.findMany({
+      where: { productId: { in: productIds } },
+      select: { branchId: true, productId: true, stock: true },
+    });
+
+    const stockByProduct = new Map<string, Map<string, number>>();
+    for (const row of branchStocks) {
+      if (!stockByProduct.has(row.productId)) {
+        stockByProduct.set(row.productId, new Map());
+      }
+      stockByProduct.get(row.productId)!.set(row.branchId, Number(row.stock));
+    }
+
+    const mapped = products.map((p) => {
+      const stocks = stockByProduct.get(p.id) ?? new Map<string, number>();
+      const ownStock = stocks.get(branchId) ?? 0;
+      return {
+        ...this.mapProduct({ ...p, stock: ownStock }),
+        branchStocks: branches.map((b) => ({
+          branchId: b.id,
+          branchCode: b.code,
+          branchName: b.name,
+          stock: stocks.get(b.id) ?? 0,
+          isOwn: b.id === branchId,
+        })),
+      };
+    });
+
+    const data = await this.dualCurrency.enrichProducts(mapped);
+    return { data, branches };
+  }
 
   private mapProduct(product: {
     id: string;

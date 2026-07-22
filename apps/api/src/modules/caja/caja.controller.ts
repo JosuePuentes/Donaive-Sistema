@@ -6,16 +6,21 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
+import { BranchStockService } from '../../common/services/branch-stock.service';
 
 @Controller('pos/caja')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class CajaController {
-  constructor(private readonly cajaService: CajaService) {}
+  constructor(
+    private readonly cajaService: CajaService,
+    private readonly branchStock: BranchStockService,
+  ) {}
 
   @Post('apertura')
   @RequirePermissions('CASH_REGISTER_OPEN')
   apertura(@Body() dto: AperturaCajaDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.cajaService.apertura(dto, user.id);
+    const branchId = this.branchStock.requireBranchId(user.branchId);
+    return this.cajaService.apertura(dto, user.id, branchId);
   }
 
   @Get('estado-actual')

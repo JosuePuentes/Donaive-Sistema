@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { inventoryApi, productsApi } from '@/lib/inventory-api';
+import { ApiError, formatApiError } from '@/lib/api-error';
 import type { Product, InventoryAdjustment } from '@/types/inventory';
 import { ADJUSTMENT_REASONS, SHRINKAGE_REASONS } from '@/types/inventory';
 
@@ -40,13 +41,14 @@ export default function AdjustmentsPage() {
   const load = useCallback(async () => {
     try {
       const [prodRes, adjRes] = await Promise.all([
-        productsApi.list({ isActive: true, limit: 100, page: 1 }),
+        productsApi.listAll({ isActive: true }),
         inventoryApi.adjustments(),
       ]);
       setProducts(prodRes.data);
       setAdjustments(adjRes.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar datos');
+      if (err instanceof ApiError && err.status === 401) return;
+      setError(formatApiError(err, 'Error al cargar datos'));
     }
   }, []);
 
@@ -106,9 +108,14 @@ export default function AdjustmentsPage() {
       </div>
 
       {error && (
-        <p className="text-red-500 text-sm">
-          {error}. <Link href="/login" className="underline">Iniciar sesión</Link>
-        </p>
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <p>{error}</p>
+          {error.includes('Sesión expirada') && (
+            <Link href="/login" className="inline-block mt-2 font-medium underline">
+              Ir a iniciar sesión
+            </Link>
+          )}
+        </div>
       )}
       {success && <p className="text-green-600 text-sm bg-green-50 p-3 rounded-lg">{success}</p>}
 

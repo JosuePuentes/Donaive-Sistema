@@ -21,6 +21,8 @@ export class UsersService {
         firstName: true,
         lastName: true,
         status: true,
+        branchId: true,
+        branch: { select: { id: true, code: true, name: true } },
         createdAt: true,
         roles: { include: { role: { select: { code: true, name: true } } } },
       },
@@ -48,6 +50,11 @@ export class UsersService {
       throw new BadRequestException('Uno o más roles no son válidos');
     }
 
+    const branch = await this.prisma.branch.findFirst({
+      where: { id: dto.branchId, isActive: true },
+    });
+    if (!branch) throw new BadRequestException('Sucursal no válida');
+
     const passwordHash = await bcrypt.hash(dto.password, 12);
 
     return this.prisma.user.create({
@@ -57,6 +64,7 @@ export class UsersService {
         passwordHash,
         firstName: dto.firstName,
         lastName: dto.lastName,
+        branchId: dto.branchId,
         roles: { create: roles.map((r) => ({ roleId: r.id })) },
       },
       select: {
@@ -65,6 +73,8 @@ export class UsersService {
         username: true,
         firstName: true,
         lastName: true,
+        branchId: true,
+        branch: { select: { id: true, code: true, name: true } },
         roles: { include: { role: { select: { code: true, name: true } } } },
       },
     });
@@ -78,11 +88,19 @@ export class UsersService {
       firstName?: string;
       lastName?: string;
       passwordHash?: string;
+      branchId?: string;
     } = {};
 
     if (dto.firstName) data.firstName = dto.firstName;
     if (dto.lastName) data.lastName = dto.lastName;
     if (dto.password) data.passwordHash = await bcrypt.hash(dto.password, 12);
+    if (dto.branchId) {
+      const branch = await this.prisma.branch.findFirst({
+        where: { id: dto.branchId, isActive: true },
+      });
+      if (!branch) throw new BadRequestException('Sucursal no válida');
+      data.branchId = dto.branchId;
+    }
 
     if (dto.roles?.length) {
       const roles = await this.prisma.role.findMany({
@@ -103,6 +121,8 @@ export class UsersService {
         username: true,
         firstName: true,
         lastName: true,
+        branchId: true,
+        branch: { select: { id: true, code: true, name: true } },
         roles: { include: { role: { select: { code: true, name: true } } } },
       },
     });

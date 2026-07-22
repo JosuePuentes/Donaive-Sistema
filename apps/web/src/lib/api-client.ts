@@ -1,3 +1,5 @@
+import { ApiError } from './api-error';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 
 export function setAuthToken(token: string) {
@@ -32,8 +34,11 @@ export async function apiFetch<T>(
 
   if (response.status === 401 && typeof window !== 'undefined') {
     clearAuthToken();
-    window.location.href = '/login';
-    throw new Error('Sesión expirada. Inicie sesión nuevamente.');
+    const onLogin = window.location.pathname.startsWith('/login');
+    if (!onLogin) {
+      window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+    }
+    throw new ApiError('Sesión expirada. Inicie sesión nuevamente.', 401);
   }
 
   if (!response.ok) {
@@ -41,7 +46,7 @@ export async function apiFetch<T>(
     const message = Array.isArray(error.message)
       ? error.message.join(', ')
       : error.message ?? `HTTP ${response.status}`;
-    throw new Error(message);
+    throw new ApiError(message, response.status);
   }
 
   return response.json();

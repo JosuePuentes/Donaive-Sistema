@@ -98,7 +98,7 @@ export async function fetchMovimientosExport(from: string, to: string): Promise<
         dateFrom: from,
         dateTo: to,
         page,
-        limit: 200,
+        limit: 100,
       });
       for (const m of res.data) {
         all.push({

@@ -6,6 +6,8 @@ import { TransactionFreezeService } from '../../common/services/transaction-free
 import { TreasuryService } from '../../common/services/treasury.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { CajaService } from '../caja/caja.service';
+import { ProductsService } from '../products/products.service';
+import { BranchStockService } from '../../common/services/branch-stock.service';
 import {
   calculateGrossProfit,
   convertPaymentToUsd,
@@ -25,9 +27,15 @@ export class SalesService {
     private readonly inventoryService: InventoryService,
     private readonly cajaService: CajaService,
     private readonly treasuryService: TreasuryService,
+    private readonly productsService: ProductsService,
+    private readonly branchStock: BranchStockService,
   ) {}
 
-  async getVentasResumen() {
+  searchPosProducts(search: string, branchId: string) {
+    return this.productsService.searchForPos(search, branchId);
+  }
+
+  async getVentasResumen(branchId?: string | null) {
     const now = new Date();
     const startOfDay = new Date(now);
     startOfDay.setHours(0, 0, 0, 0);
@@ -36,6 +44,7 @@ export class SalesService {
     const invoiceFilter: Prisma.InvoiceWhereInput = {
       status: 'CONFIRMED',
       documentType: { in: [DocumentType.INVOICE, DocumentType.POS_SALE] },
+      ...(branchId ? { branchId } : {}),
     };
 
     const [diaPagos, mesPagos, mesFacturas] = await Promise.all([
@@ -67,11 +76,12 @@ export class SalesService {
     };
   }
 
-  findRecentSales() {
+  findRecentSales(branchId?: string | null) {
     return this.prisma.invoice.findMany({
       where: {
         documentType: { in: [DocumentType.INVOICE, DocumentType.POS_SALE] },
         status: 'CONFIRMED',
+        ...(branchId ? { branchId } : {}),
       },
       select: {
         id: true,
@@ -110,7 +120,7 @@ export class SalesService {
     });
   }
 
-  async createPosSale(dto: CreatePosSaleDto, userId: string) {
+  async createPosSale(dto: CreatePosSaleDto, userId: string, branchId: string) {
     const cajaSession = await this.cajaService.requireOpenSession(userId);
 
     const payments = dto.payments.filter((p) => p.amount > 0);
@@ -192,6 +202,7 @@ export class SalesService {
       const invoice = await tx.invoice.create({
         data: {
           number,
+          branchId,
           documentType: 'POS_SALE',
           status: 'CONFIRMED',
           customerId: dto.customerId,
@@ -226,6 +237,7 @@ export class SalesService {
 
       for (const line of dto.lines) {
         await this.inventoryService.registerMovementInTx(tx, {
+          branchId,
           productId: line.productId,
           movementType: 'SALE_OUT',
           quantity: line.quantity,

@@ -20,6 +20,9 @@ export class CreateUserDto {
   @IsString()
   lastName!: string;
 
+  @IsString()
+  branchId!: string;
+
   @IsArray()
   roles!: RoleCode[];
 }
@@ -37,6 +40,10 @@ export class UpdateUserDto {
   @IsString()
   @MinLength(8)
   password?: string;
+
+  @IsOptional()
+  @IsString()
+  branchId?: string;
 
   @IsOptional()
   @IsArray()

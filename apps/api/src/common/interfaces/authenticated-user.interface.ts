@@ -6,6 +6,8 @@ export interface AuthenticatedUser {
   username: string;
   firstName: string;
   lastName: string;
+  branchId: string | null;
+  branch: { id: string; code: string; name: string } | null;
   roles: string[];
   permissions: PermissionCode[];
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { productsApi } from '@/lib/inventory-api';
+import { ApiError, formatApiError } from '@/lib/api-error';
 import { formatCurrency } from '@/lib/format-currency';
 import type { Product, ProductCategory } from '@/types/inventory';
 import { PRODUCT_UNITS } from '@/types/inventory';
@@ -96,7 +97,8 @@ export default function ProductsPage() {
       setTotalPages(prodRes.meta.totalPages);
       setCategories(cats);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar productos');
+      if (err instanceof ApiError && err.status === 401) return;
+      setError(formatApiError(err, 'Error al cargar productos'));
     } finally {
       setLoading(false);
     }
@@ -274,9 +276,14 @@ export default function ProductsPage() {
       </div>
 
       {error && (
-        <p className="text-red-500 text-sm">
-          {error}. <Link href="/login" className="underline">Iniciar sesión</Link>
-        </p>
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 space-y-2">
+          <p>{error}</p>
+          {error.includes('Sesión expirada') && (
+            <Link href="/login" className="inline-block font-medium underline">
+              Ir a iniciar sesión
+            </Link>
+          )}
+        </div>
       )}
 
       {loading ? (

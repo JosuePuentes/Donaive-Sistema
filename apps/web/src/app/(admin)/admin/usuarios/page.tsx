@@ -2,8 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
+import { branchesApi } from '@/lib/branches-api';
 
 interface Role {
+  id: string;
+  code: string;
+  name: string;
+}
+
+interface BranchOption {
   id: string;
   code: string;
   name: string;
@@ -15,6 +22,8 @@ interface UserRow {
   username: string;
   firstName: string;
   lastName: string;
+  branchId?: string | null;
+  branch?: { id: string; code: string; name: string } | null;
   roles: Array<{ role: { code: string; name: string } }>;
 }
 
@@ -23,6 +32,7 @@ const ROLE_OPTIONS = ['ADMIN', 'ADMIN_OPERATOR', 'CASHIER'] as const;
 export default function UsuariosPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [branches, setBranches] = useState<BranchOption[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -32,12 +42,14 @@ export default function UsuariosPage() {
     password: '',
     firstName: '',
     lastName: '',
+    branchId: '',
     roles: ['CASHIER'] as string[],
   });
 
   function load() {
     apiFetch<UserRow[]>('/users').then(setUsers).catch(() => {});
     apiFetch<Role[]>('/users/roles').then(setRoles).catch(() => {});
+    branchesApi.listActive().then(setBranches).catch(() => {});
   }
 
   useEffect(() => {
@@ -52,6 +64,7 @@ export default function UsuariosPage() {
       password: '',
       firstName: '',
       lastName: '',
+      branchId: branches.find((b) => b.code === 'MAIN')?.id ?? branches[0]?.id ?? '',
       roles: ['CASHIER'],
     });
     setShowForm(true);
@@ -65,6 +78,7 @@ export default function UsuariosPage() {
       password: '',
       firstName: u.firstName,
       lastName: u.lastName,
+      branchId: u.branchId ?? u.branch?.id ?? '',
       roles: u.roles.map((r) => r.role.code),
     });
     setShowForm(true);
@@ -80,6 +94,7 @@ export default function UsuariosPage() {
           body: JSON.stringify({
             firstName: form.firstName,
             lastName: form.lastName,
+            branchId: form.branchId,
             roles: form.roles,
             ...(form.password ? { password: form.password } : {}),
           }),
@@ -134,6 +149,7 @@ export default function UsuariosPage() {
               <th className="text-left p-3">Usuario</th>
               <th className="text-left p-3">Email</th>
               <th className="text-left p-3">Nombre</th>
+              <th className="text-left p-3">Sucursal</th>
               <th className="text-left p-3">Roles / permisos</th>
               <th className="text-center p-3">Acciones</th>
             </tr>
@@ -145,6 +161,9 @@ export default function UsuariosPage() {
                 <td className="p-3">{u.email}</td>
                 <td className="p-3">
                   {u.firstName} {u.lastName}
+                </td>
+                <td className="p-3 text-sm text-slate-600">
+                  {u.branch?.name ?? '—'}
                 </td>
                 <td className="p-3">
                   {u.roles.map((r) => r.role.name).join(', ')}
@@ -188,6 +207,22 @@ export default function UsuariosPage() {
               <Field label="Nombre *" value={form.firstName} onChange={(v) => setForm({ ...form, firstName: v })} required />
               <Field label="Apellido *" value={form.lastName} onChange={(v) => setForm({ ...form, lastName: v })} required />
             </div>
+            <div>
+              <label className="text-sm font-medium">Sucursal *</label>
+              <select
+                value={form.branchId}
+                onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+                required
+                className="w-full mt-1 px-3 py-2 border rounded-lg bg-white"
+              >
+                <option value="">Seleccione sucursal</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} ({b.code})
+                  </option>
+                ))}
+              </select>
+            </div>
             <Field
               label={editingId ? 'Nueva contraseña (opcional)' : 'Contraseña *'}
               type="password"
@@ -219,7 +254,7 @@ export default function UsuariosPage() {
               </button>
               <button
                 type="submit"
-                disabled={saving || form.roles.length === 0}
+                disabled={saving || form.roles.length === 0 || !form.branchId}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm disabled:opacity-50"
               >
                 {saving ? 'Guardando...' : 'Guardar'}

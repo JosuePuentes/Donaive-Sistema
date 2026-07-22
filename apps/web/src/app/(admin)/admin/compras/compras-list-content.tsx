@@ -29,12 +29,20 @@ export default function ComprasListContent() {
           <h1 className="text-2xl font-bold">Compras</h1>
           <p className="text-sm text-zinc-500">Facturas de entrada y recepción de mercancía</p>
         </div>
-        <Link
-          href="/admin/compras/nueva"
-          className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg font-medium text-sm"
-        >
-          + Nueva compra
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/inventory/products"
+            className="px-4 py-2 border border-[var(--border)] rounded-lg font-medium text-sm hover:bg-[var(--muted)]"
+          >
+            + Crear producto
+          </Link>
+          <Link
+            href="/admin/compras/nueva"
+            className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg font-medium text-sm"
+          >
+            + Nueva compra
+          </Link>
+        </div>
       </div>
 
       {created && (

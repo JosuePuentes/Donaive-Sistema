@@ -16,6 +16,7 @@ import { formatCurrency } from '@/lib/format-currency';
 import type { Supplier, BankAccount } from '@/types/purchases';
 import type { Product } from '@/types/inventory';
 import { consumePurchaseDraft } from '@/lib/purchase-draft';
+import { ProductCreateModal } from '@/components/products/product-create-modal';
 
 interface LineDraft {
   key: string;
@@ -54,6 +55,7 @@ export function PurchaseForm() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [fromSuggestion, setFromSuggestion] = useState(false);
+  const [showCreateProduct, setShowCreateProduct] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -401,7 +403,16 @@ export function PurchaseForm() {
       </section>
 
       <section className="border border-[var(--border)] rounded-xl p-4 space-y-4">
-        <h2 className="font-semibold">Detalle de productos</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-semibold">Detalle de productos</h2>
+          <button
+            type="button"
+            onClick={() => setShowCreateProduct(true)}
+            className="px-3 py-2 text-sm font-medium rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+          >
+            + Crear producto
+          </button>
+        </div>
         <div className="relative">
           <input
             value={productSearch}
@@ -550,6 +561,12 @@ export function PurchaseForm() {
           {saving ? 'Procesando compra...' : 'Confirmar compra y actualizar inventario'}
         </button>
       </div>
+
+      <ProductCreateModal
+        open={showCreateProduct}
+        onClose={() => setShowCreateProduct(false)}
+        onCreated={(product) => addProduct(product)}
+      />
     </form>
   );
 }

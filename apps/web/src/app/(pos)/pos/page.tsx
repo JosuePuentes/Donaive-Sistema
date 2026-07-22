@@ -11,7 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
-import { productsApi } from '@/lib/inventory-api';
+import { posProductsApi } from '@/lib/inventory-api';
 import { cajaApi, type EstadoCaja, type ReporteZ } from '@/lib/caja-api';
 import { formatCurrency } from '@/lib/format-currency';
 import {
@@ -30,6 +30,7 @@ import type { PosSaleReceipt } from '@/types/pos-receipt';
 import { PosReceiptPrint } from '@/components/print/pos-receipt-print';
 import { PosCustomerPanel, type PosCustomer } from '@/components/pos/pos-customer-panel';
 import { PosProductLabel } from '@/components/pos/pos-product-label';
+import { PosProductList } from '@/components/pos/pos-product-list';
 
 interface PaymentMethod extends PosPaymentMethod {}
 
@@ -91,19 +92,15 @@ export default function PosPage() {
   }, []);
 
   useEffect(() => {
-    const t = setTimeout(() => setSearchDebounced(search), 300);
+    const t = setTimeout(() => setSearchDebounced(search), 150);
     return () => clearTimeout(t);
   }, [search]);
 
   useEffect(() => {
     if (!estadoCaja) return;
     const q = searchDebounced.trim();
-    productsApi
-      .list({
-        limit: 48,
-        isActive: true,
-        ...(q ? { search: q } : {}),
-      })
+    posProductsApi
+      .search(q)
       .then((r) => setProducts(r.data))
       .catch(() => setProducts([]));
     apiFetch<PaymentMethod[]>('/payment-methods').then(setPaymentMethods).catch(() => {});
@@ -468,44 +465,19 @@ export default function PosPage() {
             <div className="relative max-w-3xl">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 pointer-events-none" />
               <input
-                placeholder="Buscar por nombre, código de barras o marca..."
+                placeholder="Buscar por código, descripción o marca..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 text-lg rounded-xl border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all duration-200"
+                className="w-full pl-12 pr-4 py-3 text-base sm:text-lg rounded-xl border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all duration-200"
                 autoFocus
               />
             </div>
             <p className="text-xs text-slate-500 mt-2 ml-1">
-              {filtered.length} producto{filtered.length !== 1 ? 's' : ''} · precios en USD y Bs
+              {filtered.length} producto{filtered.length !== 1 ? 's' : ''} · lista en tiempo real · stock propio + otras sucursales (consulta)
             </p>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 sm:p-5">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
-              {filtered.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => addToCart(p)}
-                  className={cn(
-                    'group flex flex-col rounded-xl border border-slate-200 bg-white p-4 text-left',
-                    'hover:border-indigo-300 hover:shadow-md hover:shadow-indigo-500/5',
-                    'transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30',
-                    p.stock <= 0 && 'opacity-60',
-                  )}
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-50 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-500 transition-colors duration-200 mb-3">
-                    <Package className="h-5 w-5" />
-                  </div>
-                  <PosProductLabel product={p} />
-                </button>
-              ))}
-            </div>
-            {filtered.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-                <Search className="h-10 w-10 mb-3 opacity-50" />
-                <p className="text-sm font-medium">Sin resultados</p>
-              </div>
-            )}
+          <div className="flex-1 overflow-y-auto p-3 sm:p-5">
+            <PosProductList products={filtered} onSelect={addToCart} />
           </div>
         </main>
       </div>

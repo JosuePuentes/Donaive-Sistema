@@ -21,17 +21,21 @@ import { RequirePermissions } from '../../common/decorators/permissions.decorato
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { TasaBcvInterceptor } from '../../common/interceptors/tasa-bcv.interceptor';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
+import { BranchStockService } from '../../common/services/branch-stock.service';
 
 @Controller('products')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @UseInterceptors(TasaBcvInterceptor)
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly branchStock: BranchStockService,
+  ) {}
 
   @Get()
   @RequirePermissions('PRODUCTS_VIEW')
-  findAll(@Query() query: ListProductsQueryDto) {
-    return this.productsService.findAll(query);
+  findAll(@Query() query: ListProductsQueryDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.productsService.findAll(query, user.branchId);
   }
 
   @Get('categories')
@@ -54,14 +58,14 @@ export class ProductsController {
 
   @Get('barcode/:barcode')
   @RequirePermissions('PRODUCTS_VIEW', 'POS_PRICE_LOOKUP')
-  findByBarcode(@Param('barcode') barcode: string) {
-    return this.productsService.findByBarcode(barcode);
+  findByBarcode(@Param('barcode') barcode: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.productsService.findByBarcode(barcode, user.branchId);
   }
 
   @Get(':id')
   @RequirePermissions('PRODUCTS_VIEW')
-  findOne(@Param('id') id: string) {
-    return this.productsService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.productsService.findOne(id, user.branchId);
   }
 
   @Post('import/preview')
@@ -73,13 +77,15 @@ export class ProductsController {
   @Post('import')
   @RequirePermissions('PRODUCTS_MANAGE')
   importBulk(@Body() dto: ImportProductsDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.productsService.importBulk(dto.rows, user.id);
+    const branchId = this.branchStock.requireBranchId(user.branchId);
+    return this.productsService.importBulk(dto.rows, user.id, branchId);
   }
 
   @Post()
   @RequirePermissions('PRODUCTS_MANAGE')
   create(@Body() dto: CreateProductDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.productsService.create(dto, user.id);
+    const branchId = this.branchStock.requireBranchId(user.branchId);
+    return this.productsService.create(dto, user.id, branchId);
   }
 
   @Patch(':id')

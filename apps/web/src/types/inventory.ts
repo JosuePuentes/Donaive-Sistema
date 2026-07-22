@@ -37,6 +37,13 @@ export interface Product {
   allowNegativeStock: boolean;
   isActive: boolean;
   isBelowMinStock: boolean;
+  branchStocks?: Array<{
+    branchId: string;
+    branchCode: string;
+    branchName: string;
+    stock: number;
+    isOwn: boolean;
+  }>;
 }
 
 export interface InventoryMovement {

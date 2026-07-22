@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState } from 'react';
 import {
   LayoutDashboard,
   Package,
@@ -11,6 +12,9 @@ import {
   Receipt,
   History,
   Store,
+  Building2,
+  Menu,
+  X,
   Settings2,
   Printer,
   ClipboardList,
@@ -61,10 +65,19 @@ const navGroups = [
   {
     label: 'Sistema',
     items: [
+      { href: '/admin/sucursales', label: 'Sucursales', icon: Building2 },
       { href: '/admin/usuarios', label: 'Usuarios', icon: Users },
       { href: '/admin/configuracion/impresion', label: 'Impresión tickets', icon: Printer },
     ],
   },
+];
+
+const mobileNav = [
+  { href: '/dashboard', label: 'Inicio', icon: LayoutDashboard },
+  { href: '/inventory/products', label: 'Productos', icon: Package },
+  { href: '/pos', label: 'POS', icon: ShoppingCart },
+  { href: '/sales', label: 'Ventas', icon: Receipt },
+  { href: '/admin/sucursales', label: 'Sucursales', icon: Building2 },
 ];
 
 function NavLink({
@@ -96,12 +109,13 @@ function NavLink({
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const isActive = (href: string) =>
     href === '/dashboard' ? pathname === href : pathname.startsWith(href);
 
   return (
-    <div className="min-h-screen flex bg-slate-50">
+    <div className="min-h-screen flex bg-slate-50 pb-20 lg:pb-0">
       <aside className="hidden lg:flex w-64 flex-col border-r border-slate-200/80 bg-white shrink-0">
         <div className="p-5 border-b border-slate-100">
           <Link href="/" className="flex items-center gap-3 group">
@@ -160,6 +174,14 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/80 backdrop-blur-md">
           <div className="flex flex-wrap items-center justify-between gap-4 px-4 sm:px-6 lg:px-8 py-4">
             <div className="lg:hidden flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMobileOpen(true)}
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600"
+                aria-label="Abrir menú"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
               <div className="h-9 w-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold">
                 D
               </div>
@@ -190,6 +212,78 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-auto">{children}</main>
       </div>
+
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur-md safe-area-pb">
+        <div className="grid grid-cols-5">
+          {mobileNav.map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  'flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors',
+                  active ? 'text-indigo-600' : 'text-slate-500',
+                )}
+              >
+                <Icon className={cn('h-5 w-5', active && 'text-indigo-600')} />
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-50">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-900/40"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Cerrar menú"
+          />
+          <aside className="absolute left-0 top-0 bottom-0 w-[min(320px,88vw)] bg-white shadow-2xl overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100">
+              <p className="font-bold text-slate-900">Menú administrativo</p>
+              <button type="button" onClick={() => setMobileOpen(false)} className="p-2 rounded-lg hover:bg-slate-100">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <nav className="p-4 space-y-6">
+              {navGroups.map((group) => (
+                <div key={group.label}>
+                  <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                    {group.label}
+                  </p>
+                  <div className="space-y-0.5">
+                    {group.items.map((item) => (
+                      <NavLink
+                        key={item.href}
+                        {...item}
+                        active={isActive(item.href)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </nav>
+            <div className="p-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  clearAuthToken();
+                  window.location.href = '/login';
+                }}
+                className="flex items-center gap-2 w-full rounded-lg px-3 py-2.5 text-sm text-slate-500 hover:bg-rose-50 hover:text-rose-700"
+              >
+                <LogOut className="h-4 w-4" />
+                Cerrar sesión
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

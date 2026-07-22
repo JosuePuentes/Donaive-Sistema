@@ -174,6 +174,16 @@ export const inventoryApi = {
     }>('/inventory/summary'),
 };
 
+export const posProductsApi = {
+  search: (search: string) => {
+    const qs = new URLSearchParams();
+    if (search.trim()) qs.set('search', search.trim());
+    return apiFetch<{ data: Product[]; branches: Array<{ id: string; code: string; name: string }> }>(
+      `/pos/products${qs.toString() ? `?${qs}` : ''}`,
+    );
+  },
+};
+
 export const authApi = {
   login: (email: string, password: string) =>
     apiFetch<{ accessToken: string; user: { firstName: string; lastName: string } }>(

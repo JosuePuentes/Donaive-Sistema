@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { inventoryApi, productsApi } from '@/lib/inventory-api';
+import { ApiError, formatApiError } from '@/lib/api-error';
 import { formatCurrency } from '@/lib/format-currency';
 import type { InventoryMovement, Product } from '@/types/inventory';
 import { MOVEMENT_TYPE_LABELS } from '@/types/inventory';
@@ -19,7 +20,13 @@ function KardexContent() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    productsApi.list({ limit: 200, isActive: true }).then((r) => setProducts(r.data)).catch(() => {});
+    productsApi
+      .listAll({ isActive: true })
+      .then((r) => setProducts(r.data))
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 401) return;
+        setError(formatApiError(err, 'Error al cargar productos'));
+      });
   }, []);
 
   const loadMovements = useCallback(async () => {
@@ -31,7 +38,8 @@ function KardexContent() {
         : await inventoryApi.movements({ limit: 100 });
       setMovements(res.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar kardex');
+      if (err instanceof ApiError && err.status === 401) return;
+      setError(formatApiError(err, 'Error al cargar kardex'));
     } finally {
       setLoading(false);
     }
@@ -84,9 +92,14 @@ function KardexContent() {
       </div>
 
       {error && (
-        <p className="text-red-500 text-sm">
-          {error}. <Link href="/login" className="underline">Iniciar sesión</Link>
-        </p>
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <p>{error}</p>
+          {error.includes('Sesión expirada') && (
+            <Link href="/login" className="inline-block mt-2 font-medium underline">
+              Ir a iniciar sesión
+            </Link>
+          )}
+        </div>
       )}
 
       {loading ? (
