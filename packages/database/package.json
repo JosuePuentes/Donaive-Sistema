@@ -18,6 +18,7 @@
     "migrate:deploy": "prisma migrate deploy",
     "push": "prisma db push",
     "seed": "tsx prisma/seed.ts",
+    "purge": "tsx prisma/purge-data.ts",
     "studio": "prisma studio",
     "typecheck": "tsc --noEmit"
   },

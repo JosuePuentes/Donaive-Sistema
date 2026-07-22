@@ -17,6 +17,7 @@
     "db:migrate": "pnpm --filter @flp/database migrate",
     "db:push": "pnpm --filter @flp/database push",
     "db:seed": "pnpm --filter @flp/database seed",
+    "db:purge": "pnpm --filter @flp/database purge",
     "db:migrate:deploy": "pnpm --filter @flp/database exec prisma migrate deploy",
     "db:studio": "pnpm --filter @flp/database studio",
     "lint": "pnpm -r lint",
