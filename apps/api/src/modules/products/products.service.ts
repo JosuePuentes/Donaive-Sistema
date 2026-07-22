@@ -578,7 +578,7 @@ export class ProductsService {
       const stocks = stockByProduct.get(p.id) ?? new Map<string, number>();
       const ownStock = stocks.get(branchId) ?? 0;
       return {
-        ...this.mapProduct({ ...p, stock: ownStock }),
+        ...this.mapProduct({ ...p, stock: new Prisma.Decimal(ownStock) }),
         branchStocks: branches.map((b) => ({
           branchId: b.id,
           branchCode: b.code,
