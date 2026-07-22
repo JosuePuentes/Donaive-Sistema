@@ -72,7 +72,7 @@ export class SalesService {
       ventasMesFacturadoUsd: roundCurrency(Number(mesFacturas._sum?.totalUsd ?? 0), BASE_CURRENCY),
       ventasMesVes: roundCurrency(Number(mesFacturas._sum?.totalVes ?? 0), TRANSACTION_CURRENCY),
       ventasMesTransacciones: mesFacturas._count,
-      tasaBcvActual: await this.transactionFreeze.getTasaBcvMomento(),
+      tasaBcvActual: (await this.transactionFreeze.getTasaBcvMomentoOptional()) ?? 0,
     };
   }
 

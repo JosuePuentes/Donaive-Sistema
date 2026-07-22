@@ -20,6 +20,10 @@ export class TransactionFreezeService {
     return this.tasaBcvService.getTasaParaTransaccion();
   }
 
+  async getTasaBcvMomentoOptional(): Promise<number | null> {
+    return this.tasaBcvService.getTasaParaTransaccionOptional();
+  }
+
   freezeLine(
     input: TransactionLineInput,
     tasaBcvMomento: number,

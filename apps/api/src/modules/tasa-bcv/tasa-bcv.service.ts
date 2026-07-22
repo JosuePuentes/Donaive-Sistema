@@ -140,6 +140,16 @@ export class TasaBcvService {
     return tasa.montoBs;
   }
 
+  /** Lectura tolerante para reportes cuando aún no hay tasa registrada */
+  async getTasaParaTransaccionOptional(): Promise<number | null> {
+    try {
+      return await this.getTasaParaTransaccion();
+    } catch (err) {
+      if (err instanceof NotFoundException) return null;
+      throw err;
+    }
+  }
+
   private mapTasa(tasa: {
     id: string;
     fecha: Date;

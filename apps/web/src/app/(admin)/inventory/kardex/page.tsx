@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { inventoryApi, productsApi } from '@/lib/inventory-api';
-import { ApiError, formatApiError } from '@/lib/api-error';
+import { ApiError, formatApiError, isSessionExpiredMessage } from '@/lib/api-error';
 import { formatCurrency } from '@/lib/format-currency';
 import type { InventoryMovement, Product } from '@/types/inventory';
 import { MOVEMENT_TYPE_LABELS } from '@/types/inventory';
@@ -94,7 +94,7 @@ function KardexContent() {
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           <p>{error}</p>
-          {error.includes('Sesión expirada') && (
+          {isSessionExpiredMessage(error) && (
             <Link href="/login" className="inline-block mt-2 font-medium underline">
               Ir a iniciar sesión
             </Link>

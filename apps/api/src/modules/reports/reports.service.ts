@@ -83,7 +83,7 @@ export class ReportsService {
           where: { isActive: true },
           _sum: { balance: true },
         }),
-        this.transactionFreeze.getTasaBcvMomento(),
+        this.transactionFreeze.getTasaBcvMomentoOptional(),
       ]);
 
     let ventasMesUsd = Number(monthTotals._sum?.totalUsd ?? 0);
@@ -115,7 +115,7 @@ export class ReportsService {
         cxpPorVencerSemanaCount: cxpWeek._count,
         productosBajoMinimo: lowStockCount,
         disponibilidadBancosUsd: Number(bankBalances._sum.balance ?? 0),
-        tasaBcvActual: tasaBcv,
+        tasaBcvActual: tasaBcv ?? 0,
       },
     };
   }
@@ -496,7 +496,7 @@ export class ReportsService {
         where: { status: { in: ['PENDING', 'PARTIAL', 'OVERDUE'] }, balanceUsd: { gt: 0 } },
         select: { dueDate: true, balanceUsd: true },
       }),
-      this.transactionFreeze.getTasaBcvMomento(),
+      this.transactionFreeze.getTasaBcvMomentoOptional(),
     ]);
 
     const disponibilidadUsd = roundCurrency(
@@ -547,7 +547,7 @@ export class ReportsService {
 
     return {
       horizonDays,
-      tasaBcvActual: tasaBcv,
+      tasaBcvActual: tasaBcv ?? 0,
       disponibilidadActualUsd: disponibilidadUsd,
       cuentasBancarias: bankAccounts.map((a) => ({
         nombre: a.accountName,

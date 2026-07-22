@@ -13,6 +13,7 @@ import {
   Sun,
 } from 'lucide-react';
 import { reportsApi } from '@/lib/reports-api';
+import { formatApiError } from '@/lib/api-error';
 import { formatCurrency } from '@/lib/format-currency';
 import type { CoverageDayOption } from '@flp/shared';
 import type {
@@ -59,6 +60,8 @@ function DashboardSkeleton() {
   );
 }
 
+type SectionState = 'loading' | 'ok' | 'error' | 'idle';
+
 export default function DashboardContent() {
   const [kpisLoading, setKpisLoading] = useState(true);
   const [error, setError] = useState('');
@@ -73,40 +76,55 @@ export default function DashboardContent() {
   const [inventario, setInventario] = useState<AnalisisInventarioReport | null>(null);
   const [flujo, setFlujo] = useState<FlujoCajaReport | null>(null);
   const [sectionErrors, setSectionErrors] = useState<string[]>([]);
+  const [ventasState, setVentasState] = useState<SectionState>('loading');
+  const [metodosState, setMetodosState] = useState<SectionState>('loading');
+  const [flujoState, setFlujoState] = useState<SectionState>('loading');
 
   const loadKpis = useCallback(async () => {
     setKpisLoading(true);
     setError('');
     try {
       setDashboard(await reportsApi.dashboard());
-    } catch {
-      setError('No se pudieron cargar los KPIs del tablero.');
+    } catch (err) {
+      setError(formatApiError(err, 'No se pudieron cargar los KPIs del tablero.'));
     } finally {
       setKpisLoading(false);
     }
   }, []);
 
   const loadVentas = useCallback(async () => {
+    setVentasState('loading');
     try {
       setVentas(await reportsApi.ventasDiarias(daysRange));
-    } catch {
-      setSectionErrors((prev) => [...new Set([...prev, 'Ventas diarias'])]);
+      setVentasState('ok');
+    } catch (err) {
+      setVentas(null);
+      setVentasState('error');
+      setSectionErrors((prev) => [...new Set([...prev, `Ventas diarias: ${formatApiError(err)}`])]);
     }
   }, [daysRange]);
 
   const loadMetodos = useCallback(async () => {
+    setMetodosState('loading');
     try {
       setMetodos(await reportsApi.metodosPago(daysRange));
-    } catch {
-      setSectionErrors((prev) => [...new Set([...prev, 'Métodos de pago'])]);
+      setMetodosState('ok');
+    } catch (err) {
+      setMetodos(null);
+      setMetodosState('error');
+      setSectionErrors((prev) => [...new Set([...prev, `Métodos de pago: ${formatApiError(err)}`])]);
     }
   }, [daysRange]);
 
   const loadFlujo = useCallback(async () => {
+    setFlujoState('loading');
     try {
       setFlujo(await reportsApi.flujoCaja(cashFlowDays));
-    } catch {
-      setSectionErrors((prev) => [...new Set([...prev, 'Flujo de caja'])]);
+      setFlujoState('ok');
+    } catch (err) {
+      setFlujo(null);
+      setFlujoState('error');
+      setSectionErrors((prev) => [...new Set([...prev, `Flujo de caja: ${formatApiError(err)}`])]);
     }
   }, [cashFlowDays]);
 
@@ -114,8 +132,8 @@ export default function DashboardContent() {
     setInventarioLoading(true);
     try {
       setInventario(await reportsApi.analisisInventario(days));
-    } catch {
-      setSectionErrors((prev) => [...new Set([...prev, 'Análisis inventario'])]);
+    } catch (err) {
+      setSectionErrors((prev) => [...new Set([...prev, `Análisis inventario: ${formatApiError(err)}`])]);
     } finally {
       setInventarioLoading(false);
     }
@@ -144,6 +162,9 @@ export default function DashboardContent() {
 
   function refreshAll() {
     setSectionErrors([]);
+    setVentasState('loading');
+    setMetodosState('loading');
+    setFlujoState('loading');
     loadKpis();
     loadVentas();
     loadMetodos();
@@ -186,7 +207,13 @@ export default function DashboardContent() {
       {error ? <Alert variant="danger">{error}</Alert> : null}
       {sectionErrors.length > 0 ? (
         <Alert variant="warning">
-          No se cargaron: {sectionErrors.join(', ')}. Verifique permisos o intente actualizar.
+          Algunas secciones no están disponibles: {sectionErrors.join(' · ')}
+        </Alert>
+      ) : null}
+
+      {kpis && kpis.tasaBcvActual <= 0 ? (
+        <Alert variant="warning">
+          No hay tasa BCV registrada. Regístrela en Configuración → Tasa BCV para ver montos en bolívares.
         </Alert>
       ) : null}
 
@@ -253,7 +280,15 @@ export default function DashboardContent() {
             </SelectField>
           </CardHeader>
           <CardContent>
-            {ventas ? <VentasChart ventas={ventas} /> : <div className="h-72 text-sm text-slate-400">Cargando…</div>}
+            {ventas ? (
+              <VentasChart ventas={ventas} />
+            ) : ventasState === 'loading' ? (
+              <div className="h-72 text-sm text-slate-400">Cargando…</div>
+            ) : (
+              <div className="h-72 text-sm text-slate-400 flex items-center justify-center">
+                Sin datos de ventas en este período
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -273,8 +308,12 @@ export default function DashboardContent() {
           <CardContent>
             {metodos ? (
               <MetodosPagoChart metodos={metodos} />
-            ) : (
+            ) : metodosState === 'loading' ? (
               <div className="h-72 text-sm text-slate-400">Cargando…</div>
+            ) : (
+              <div className="h-72 text-sm text-slate-400 flex items-center justify-center">
+                Sin datos de métodos de pago
+              </div>
             )}
           </CardContent>
         </Card>
@@ -294,7 +333,15 @@ export default function DashboardContent() {
           </SelectField>
         </CardHeader>
         <CardContent>
-          {flujo ? <FlujoCajaChart flujo={flujo} /> : <div className="h-72 text-sm text-slate-400">Cargando…</div>}
+          {flujo ? (
+            <FlujoCajaChart flujo={flujo} />
+          ) : flujoState === 'loading' ? (
+            <div className="h-72 text-sm text-slate-400">Cargando…</div>
+          ) : (
+            <div className="h-72 text-sm text-slate-400 flex items-center justify-center">
+              Sin proyección de flujo de caja
+            </div>
+          )}
         </CardContent>
       </Card>
 

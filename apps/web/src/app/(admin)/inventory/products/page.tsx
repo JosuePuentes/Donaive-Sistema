@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { productsApi } from '@/lib/inventory-api';
-import { ApiError, formatApiError } from '@/lib/api-error';
+import { ApiError, formatApiError, isSessionExpiredMessage } from '@/lib/api-error';
 import { formatCurrency } from '@/lib/format-currency';
 import type { Product, ProductCategory } from '@/types/inventory';
 import { PRODUCT_UNITS } from '@/types/inventory';
@@ -278,7 +278,7 @@ export default function ProductsPage() {
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 space-y-2">
           <p>{error}</p>
-          {error.includes('Sesión expirada') && (
+          {isSessionExpiredMessage(error) && (
             <Link href="/login" className="inline-block font-medium underline">
               Ir a iniciar sesión
             </Link>

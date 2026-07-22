@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Home, Lock, Wallet } from 'lucide-react';
 import { roundCurrency, BASE_CURRENCY } from '@flp/shared';
 import { cajaApi, type EstadoCaja, type ReporteZ } from '@/lib/caja-api';
+import { formatApiError, shouldShowLoginLink } from '@/lib/api-error';
 import { formatCurrency } from '@/lib/format-currency';
 import { ReporteZView } from '@/components/pos/reporte-z';
 import { Button } from '@/components/ui/button';
@@ -30,7 +31,8 @@ export function AperturaCajaScreen({ onSuccess }: AperturaCajaProps) {
       if ('abierta' in estado && !estado.abierta) throw new Error('Error al abrir caja');
       onSuccess(estado as EstadoCaja);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al abrir caja');
+      if (shouldShowLoginLink(err)) return;
+      setError(formatApiError(err, 'Error al abrir caja'));
     } finally {
       setLoading(false);
     }
@@ -70,10 +72,15 @@ export function AperturaCajaScreen({ onSuccess }: AperturaCajaProps) {
 
         {error ? (
           <Alert variant="danger">
-            {error}.{' '}
-            <Link href="/login" className="underline font-medium">
-              Iniciar sesión
-            </Link>
+            {error}
+            {error.includes('cuenta de caja') ? (
+              <>
+                {' '}
+                <Link href="/banks" className="underline font-medium">
+                  Configurar bancos
+                </Link>
+              </>
+            ) : null}
           </Alert>
         ) : null}
 

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { salesApi, type Sale, type VentasResumen } from '@/lib/sales-api';
+import { formatApiError } from '@/lib/api-error';
 import { formatCurrency } from '@/lib/format-currency';
 
 function sumCobradoUsd(sale: Sale): number {
@@ -14,14 +15,26 @@ export default function SalesPage() {
   const [resumen, setResumen] = useState<VentasResumen | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [resumenWarning, setResumenWarning] = useState('');
 
   useEffect(() => {
-    Promise.all([salesApi.list(), salesApi.resumen()])
-      .then(([list, sum]) => {
-        setSales(list);
-        setResumen(sum);
+    setLoading(true);
+    setError('');
+    setResumenWarning('');
+    Promise.allSettled([salesApi.list(), salesApi.resumen()])
+      .then(([listResult, resumenResult]) => {
+        if (listResult.status === 'fulfilled') {
+          setSales(listResult.value);
+        } else {
+          setError(formatApiError(listResult.reason, 'Error al cargar ventas'));
+        }
+        if (resumenResult.status === 'fulfilled') {
+          setResumen(resumenResult.value);
+        } else {
+          setResumen(null);
+          setResumenWarning(formatApiError(resumenResult.reason, 'No se pudo cargar el resumen'));
+        }
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Error al cargar ventas'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -64,6 +77,10 @@ export default function SalesPage() {
           </div>
         </div>
       )}
+
+      {resumenWarning ? (
+        <p className="text-amber-800 text-sm bg-amber-50 border border-amber-200 rounded-lg p-3">{resumenWarning}</p>
+      ) : null}
 
       {error ? <p className="text-red-600 text-sm">{error}</p> : null}
 

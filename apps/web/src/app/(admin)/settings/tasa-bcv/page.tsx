@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { tasaBcvApi, type TasaBcv } from '@/lib/tasa-bcv-api';
+import { formatApiError, shouldShowLoginLink } from '@/lib/api-error';
 import { formatCurrency } from '@/lib/format-currency';
 
 export default function TasaBcvPage() {
@@ -19,18 +20,23 @@ export default function TasaBcvPage() {
     setLoading(true);
     setError('');
     try {
-      const [actual, hist] = await Promise.all([
-        tasaBcvApi.getActual(),
+      const [hoy, hist] = await Promise.all([
+        tasaBcvApi.getHoy(),
         tasaBcvApi.getHistorial(15),
       ]);
-      setTasaActual({
-        montoBs: actual.montoBs,
-        fecha: new Date(actual.fecha).toISOString().split('T')[0],
-      });
-      setMontoBs(String(actual.montoBs));
       setHistorial(hist);
+      if (hoy.registrada && hoy.montoBs != null) {
+        const fecha = hoy.fecha
+          ? new Date(hoy.fecha).toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0];
+        setTasaActual({ montoBs: hoy.montoBs, fecha });
+        setMontoBs(String(hoy.montoBs));
+      } else {
+        setTasaActual(null);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar tasa BCV');
+      if (shouldShowLoginLink(err)) return;
+      setError(formatApiError(err, 'Error al cargar tasa BCV'));
     } finally {
       setLoading(false);
     }
@@ -50,7 +56,8 @@ export default function TasaBcvPage() {
       setSuccess('Tasa BCV del día actualizada correctamente');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al actualizar');
+      if (shouldShowLoginLink(err)) return;
+      setError(formatApiError(err, 'Error al actualizar'));
     } finally {
       setSaving(false);
     }
@@ -66,18 +73,16 @@ export default function TasaBcvPage() {
         </p>
       </div>
 
-      {error && (
-        <p className="text-red-500 text-sm">
-          {error}. <Link href="/login" className="underline">Iniciar sesión</Link>
-        </p>
-      )}
+      {error ? (
+        <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg p-3">{error}</p>
+      ) : null}
       {success && <p className="text-green-600 text-sm bg-green-50 p-3 rounded-lg">{success}</p>}
 
       {loading ? (
         <p className="text-zinc-500">Cargando...</p>
       ) : (
         <>
-          {tasaActual && (
+          {tasaActual ? (
             <div className="border border-[var(--border)] rounded-xl p-6 bg-[var(--muted)]">
               <p className="text-sm text-zinc-500">Tasa vigente ({tasaActual.fecha})</p>
               <p className="text-3xl font-bold mt-1">
@@ -87,6 +92,10 @@ export default function TasaBcvPage() {
                 Ejemplo: producto a {formatCurrency(10)} = {formatCurrency(10 * tasaActual.montoBs, 'VES')}
               </p>
             </div>
+          ) : (
+            <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              No hay tasa BCV registrada. Registre la primera tasa abajo para habilitar compras, ventas y reportes en bolívares.
+            </p>
           )}
 
           <form onSubmit={handleUpdate} className="border border-[var(--border)] rounded-xl p-6 space-y-4">
@@ -144,6 +153,13 @@ export default function TasaBcvPage() {
                       </td>
                     </tr>
                   ))}
+                  {historial.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="p-6 text-center text-zinc-500">
+                        Sin historial de tasas
+                      </td>
+                    </tr>
+                  ) : null}
                 </tbody>
               </table>
             </div>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Printer, Save } from 'lucide-react';
 import type { PaperType, PrintTemplateConfig, UpdatePrintTemplateConfigInput } from '@flp/shared';
 import { printConfigApi } from '@/lib/print-config-api';
+import { formatApiError } from '@/lib/api-error';
 import { PAPER_TYPE_LABELS } from '@/lib/print-utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -52,7 +53,7 @@ export default function PrintConfigPage() {
       const data = await printConfigApi.get();
       setConfig(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar configuración');
+      setError(formatApiError(err, 'Error al cargar configuración'));
     } finally {
       setLoading(false);
     }
@@ -90,7 +91,7 @@ export default function PrintConfigPage() {
       setConfig(updated);
       setSuccess('Configuración guardada correctamente');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al guardar');
+      setError(formatApiError(err, 'Error al guardar'));
     } finally {
       setSaving(false);
     }
@@ -107,7 +108,7 @@ export default function PrintConfigPage() {
   if (!config) {
     return (
       <div className="max-w-6xl mx-auto py-12">
-        <Alert variant="danger">{error || 'No se pudo cargar la configuración'}</Alert>
+        {error ? <Alert variant="danger">{error}</Alert> : null}
       </div>
     );
   }

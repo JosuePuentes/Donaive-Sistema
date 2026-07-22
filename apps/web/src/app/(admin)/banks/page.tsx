@@ -88,7 +88,7 @@ export default function BanksPage() {
         bankAccountId: methodForm.bankAccountId || undefined,
       }),
     });
-    setMethodForm({ code: '', name: '', type: 'CASH', currency: 'USD', bankAccountId: '' });
+    setMethodForm({ code: '', name: '', type: 'CASH_USD', currency: 'USD', bankAccountId: '' });
     load();
   }
 
